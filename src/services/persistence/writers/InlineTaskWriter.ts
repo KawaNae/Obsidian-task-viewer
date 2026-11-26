@@ -1,7 +1,6 @@
 import { type App, TFile } from 'obsidian';
 import { collectFlowLineIndices } from '../../parsing/utils/FlowLineScanner';
 import { carryTo } from '../Carry';
-import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Block, Placement, type InSection, type Spot } from '../utils/Placement';
 import { ListNumber } from '../utils/ListNumber';
 import { renderFlowInstance } from '../FlowInstanceLines';
@@ -13,6 +12,7 @@ import {
 import { firingTrials, type CompletionFire, type FiringOutcome } from '../FiringTrials';
 import type { SubtreeReplacement, TaskOp } from '../TaskOps';
 import { replaceSubtree } from '../ReplaceSubtree';
+import { updateRow } from '../UpdateRow';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { indentUnit } from '../../../utils/ObsidianConfig';
@@ -170,12 +170,7 @@ export class InlineTaskWriter {
         const lines = draft.lines;
         switch (op.kind) {
             case 'update': {
-                // The row is the one being changed, and stays the same task.
-                // Done before the property lines, which are all below it, so
-                // the coordinate is still this line afterwards.
-                draft.rewrite(line, Outline.indentOf(lines[line]) + Outline.dedent(op.text));
-                if (!op.properties) return true;
-                const refused = ChildPropertyLineEditor.applyOps(draft, line, op.properties, indentUnit(this.app));
+                const refused = updateRow(draft, line, op, indentUnit(this.app));
                 return refused === null || session.refuse(refused);
             }
             case 'insert-instance': {

@@ -2,7 +2,7 @@ import { type App, Notice, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
-import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
+import { planUpdate } from './UpdatePlan';
 import { FlowExecutor, type FireOp } from '../flow/FlowExecutor';
 import { FlowNotices } from '../flow/FlowNotices';
 import { completes } from '../flow/FlowTrigger';
@@ -231,12 +231,8 @@ export class Operations {
         const updates = typeof asked === 'function' ? asked(task) : asked;
         if (typeof asked === 'function') logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
 
-        // 非時刻プロパティ（color/tags/custom 等）の書き込み操作。写しと更新の
-        // diff から導く。
-        const keys = this.settings.scopeKeys;
-        const propertyOps = PropertyUpdatePlanner.plan(task, updates, keys);
-
-        // 書く行は写しに更新を重ねた姿から作る。行の探索は写しで行う:
+        // 書く行と非時刻プロパティ（color/tags/custom 等）の操作は、写しに
+        // 更新を重ねた姿と、写しと更新の diff から作る。行の探索は写しで行う:
         // ファイルに書かれているのは写しの行なので、更新後の日付や時刻で
         // 探しに行くと、まさにその値を変える更新のときに空振りする。子の
         // プロパティ行も写しの値から作るので、書き換えるときは部分木も計画が
@@ -245,11 +241,11 @@ export class Operations {
         // 行を完了させる書き換えは、同じ書き込みでフローを発火させる。完了か
         // どうかは、書き込みが照合する土台の行と書く行の対で答える
         // （`completes`）。発火の計画は書き込みの中で、書く行から立てる。
-        const text = formatRow({ ...task, ...updates });
-        const target = plannedOn(task, { subtree: propertyOps.length > 0 });
+        const op = planUpdate(task, updates, this.settings.scopeKeys);
+        const target = plannedOn(task, { subtree: (op.properties?.ops.length ?? 0) > 0 });
         const answer = await this.writeCompleting(
-            completes(task.originalText, text, this.settings.statusDefinitions) ? task.file : null,
-            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text, properties: { ops: propertyOps, keys } }], { fire, refused: heard(hear) }));
+            completes(task.originalText, op.text, this.settings.statusDefinitions) ? task.file : null,
+            (fire) => this.repository.write(task.file, target, [op], { fire, refused: heard(hear) }));
 
         // Not written: why has been told once (see reportRefusal), or is the caller's to tell.
         if (!answer.written) logWarn(`[Operations] update was not written: id=${taskId} fields=[${Object.keys(updates)}]`);
