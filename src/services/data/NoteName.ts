@@ -215,6 +215,11 @@ export const NoteName = {
         return made(vault, `${spelledAs(vault, text.slice(0, cut))}/${text.slice(cut + 1)}.md`, 'path');
     },
 
+    /** The note field naming the note at `path`, there or not yet: its name, and the path picked. */
+    askOf(path: string): NoteAsk {
+        return { text: path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, ''), picked: path };
+    },
+
     /** The vault's note at `path`, case aside, spelt as the vault spells it; the one spelt as asked first. Null when there is none. */
     fileAt(vault: NoteVault, path: string): TFile | null {
         const notes = vault.getMarkdownFiles();

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { t } from '../../../src/i18n';
-import { SendDialog, initialAsk, lineValue, yamlValue, type SendHost, type SendViewState } from '../../../src/modals/noteops/SendDialog';
+import { SendDialog, initialAsk, lineValue, yamlValue, type SendHost, type SendOptions, type SendViewState } from '../../../src/modals/noteops/SendDialog';
 import { SendEditors } from '../../../src/modals/noteops/SendEditors';
 import type { DraftEditor, EditorOnHooks, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
 import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
@@ -102,7 +102,7 @@ function typed(text: string) {
     return { text, picked: null };
 }
 
-function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (sending: SendingLines) => string | null } = {}) {
+function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (sending: SendingLines) => string | null; options?: SendOptions } = {}) {
     const preview = opts.preview ?? previewOf();
     const states: SendViewState[] = [];
     const editors: FakeEditor[] = [];
@@ -143,7 +143,7 @@ function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (
     };
     dialog = new SendDialog(preview, host, {
         render: (state) => { states.push(state); },
-    });
+    }, opts.options);
     return {
         dialog, rows, send, sent, close, editors, fixed, asks,
         /** Send as the send button does. */
@@ -784,5 +784,38 @@ describe('drafts its host holds', () => {
         const drawn = h.states.length;
         h.dialog.draftsChanged();
         expect(h.states.length).toBe(drawn + 1);
+    });
+});
+
+describe('what a dialog opens with besides its rows', () => {
+    it('opens its fields as it is told, and asks of them first', async () => {
+        const initial = { note: { text: 'note', picked: 'note.md' }, heading: 'Done' };
+        const h = setUp({ options: { initial } });
+        expect(h.asks[0].ask).toEqual(initial);
+    });
+
+    it('sends no row to where it stands: its note under the heading it stands under, said under the note in place of where it goes', async () => {
+        const stands = { note: 'note.md', heading: 'Tasks' };
+        const h = await answered(facts({ kind: 'same', path: 'note.md' }), { options: { stands } });
+        expect(h.state().canSend).toBe(false);
+        expect(h.state().issues.filter(one => one.at === 'note' || one.at === 'heading')).toEqual([
+            { at: 'note', tone: 'info', text: t('modal.send.samePlace') },
+        ]);
+    });
+
+    it('sends it under another heading of its note, and to another note under the same heading', async () => {
+        const stands = { note: 'note.md', heading: 'Tasks' };
+        const other = await answered(facts({ kind: 'same', path: 'note.md', to: { note: { kind: 'existing', path: 'note.md' }, spot: { ...SECTION, heading: 'Done' } } }), { options: { stands } });
+        expect(other.state().canSend).toBe(true);
+        const away = await answered(facts({ kind: 'existing', path: 'Plan.md' }), { options: { stands } });
+        expect(away.state().canSend).toBe(true);
+    });
+
+    it('a row above its note\'s first heading stands where the heading field names the note\'s end', async () => {
+        const stands = { note: 'note.md', heading: null };
+        const end = await answered(facts({ kind: 'same', path: 'note.md', to: { note: { kind: 'existing', path: 'note.md' }, spot: 'end' }, heading: null }), { options: { stands } });
+        expect(end.state().canSend).toBe(false);
+        const under = await answered(facts({ kind: 'same', path: 'note.md' }), { options: { stands } });
+        expect(under.state().canSend).toBe(true);
     });
 });

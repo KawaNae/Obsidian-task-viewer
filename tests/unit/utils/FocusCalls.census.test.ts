@@ -60,8 +60,13 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
     },
     {
         file: 'modals/noteops/SendModal.ts',
-        line: 'return editor ? { to: editor } : this.field.focus(\'note\');',
+        line: 'return editor ? { to: editor } : this.fields.focus(\'note\');',
         why: 'the dialog\'s initialFocus: answers where the overlay puts its first focus, and puts none',
+    },
+    {
+        file: 'modals/noteops/SendFields.ts',
+        line: 'return this.field.focus(at);',
+        why: 'answers where the focus goes in a send\'s fields, for the form that holds them, and puts none',
     },
     {
         file: 'modals/place/PlacePane.ts',
