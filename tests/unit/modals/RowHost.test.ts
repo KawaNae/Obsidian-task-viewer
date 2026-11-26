@@ -86,6 +86,7 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         write: vi.fn(),
         putTyped: vi.fn(() => true),
         notWritten: vi.fn(),
+        edited: vi.fn(),
     };
     if (bound) host.bind(form);
     const panel: HubPanel = {

@@ -47,6 +47,11 @@ export class DraftGuard<After extends string> {
         return this.after === null ? null : this.lost;
     }
 
+    /** The step the question was put for, which throwing away goes on to; null while none is put. */
+    get step(): After | null {
+        return this.after;
+    }
+
     /**
      * Whether the step `after` may go on now: yes when nothing would be lost
      * and nothing is asked; else the question is put, first or again, and no.
@@ -55,10 +60,12 @@ export class DraftGuard<After extends string> {
         const loss = this.host.loss();
         if (this.after === null && loss === null) return true;
         const before = this.asking;
+        const step = this.after;
         this.lost = loss ?? this.lost ?? { kind: 'draft' };
         this.after = after;
-        // Put again as it stands, the question is not drawn again.
-        if (!sameLoss(before, this.lost)) this.host.render();
+        // Put again as it stands, for the same step, the question is not drawn
+        // again; for another, its answer that throws away may read otherwise.
+        if (!sameLoss(before, this.lost) || step !== after) this.host.render();
         this.host.asked();
         return false;
     }

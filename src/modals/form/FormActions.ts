@@ -88,8 +88,9 @@ export class FormActions {
      * the act reads its busy label. Cancel stays: the close it asks for waits
      * on what is under way. The form's act (`'cta'`) is offered only while
      * `ctaEnabled` (what the form holds can be acted on: a value that reads).
-     * `ask` is the question put now, null while none is; `keep` what its
-     * answer that keeps reads, when it is not the ask's `keepLabel`.
+     * `ask` is the question put now, null while none is; `keep` and
+     * `discard` what its answers read, when they are not the ask's
+     * `keepLabel` and `discardLabel`.
      * `offered` false takes the lead and the acts out of the row and hides
      * cancel (the question and its answers stay); none, they are offered. `act` is what the form's act
      * reads now, and while busy, in place of what it was built with.
@@ -99,6 +100,7 @@ export class FormActions {
         ctaEnabled?: boolean;
         ask?: string | null;
         keep?: string;
+        discard?: string;
         offered?: boolean;
         act?: { label: string; busyLabel?: string };
     }): void {
@@ -111,6 +113,7 @@ export class FormActions {
         this.leadEl?.toggle(!this.readsBack);
         this.askEl?.toggle(this.readsBack);
         this.discardButton?.toggle(this.readsBack);
+        if (this.spec.ask) this.discardButton?.setText(state.discard ?? this.spec.ask.discardLabel);
         this.cancelButton.setText(this.cancelLabel());
         const cancels = offered && this.spec.cancel !== undefined;
         this.cancelButton.toggle(this.readsBack || cancels);

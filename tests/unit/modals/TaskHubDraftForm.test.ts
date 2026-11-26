@@ -1212,6 +1212,34 @@ describe('a hub whose host shuts the row\'s values only', () => {
         expect(held.ask()).toBe('移動を捨てますか');
     });
 
+    it('reads its answer that throws away as discarding at cancel, which leaves the hub open, and as discarding and closing at a close', () => {
+        const discardText = (s: ReturnType<typeof setUpShut>) => s.foot.find('tv-form__discard')!.text;
+        for (const shut of [VALUES, null]) {
+            const s = setUpShut({ changed: true });
+            s.hold(s.draft);
+            s.shutBy(shut);
+            s.press(s.cancel());
+            expect(discardText(s)).toBe(t('modal.draft.discard'));
+            // A close while cancel asks: the question is the close's now.
+            expect(s.form.beforeClose()).toBe('stay');
+            expect(discardText(s)).toBe(t('modal.hub.unsavedDiscard'));
+            s.press(s.cancel());
+            s.press(s.cancel());
+            expect(discardText(s)).toBe(t('modal.draft.discard'));
+        }
+    });
+
+    it('withdraws the question as what is held is edited outside its fields', () => {
+        const s = setUpShut({ changed: true });
+        s.hold(s.draft);
+        s.shutBy(VALUES);
+        s.press(s.cancel());
+        expect(s.ask()).toBe('移動を捨てますか');
+        s.form.edited();
+        expect(s.ask()).toBe('');
+        expect(s.draft.discard).not.toHaveBeenCalled();
+    });
+
     it('keeps what is held where the host takes the focus, and on the name where it takes none', () => {
         const taken = setUpShut({ changed: true, keep: () => true });
         taken.hold(taken.draft);

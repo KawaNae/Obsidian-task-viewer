@@ -223,6 +223,16 @@ export class SendDialog {
         };
     }
 
+    /**
+     * The note the rows go to as the fields name it now: its path while the
+     * answer for what they hold names one note (one there is, the rows'
+     * own, or one the send makes); null while it is being read, or the
+     * fields name none or more than one.
+     */
+    notePath(): string | null {
+        return this.answer.caughtUp ? oneNote(this.answer.value)?.path ?? null : null;
+    }
+
     /** Send as the dialog holds it, the drafts as they are now: nothing while a send may not be asked. */
     async send(): Promise<void> {
         const req = this.request();

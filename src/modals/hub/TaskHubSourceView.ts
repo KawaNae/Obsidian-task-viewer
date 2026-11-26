@@ -56,6 +56,7 @@ export class TaskHubSourceView implements SourceSurface {
     /** Why the last apply wrote nothing, said under the editor. */
     private readonly issues: IssueBoard<never>;
     private readonly lostEl: HTMLElement;
+    private readonly lostWhy: HTMLElement;
     private readonly lostDiscardBtn: HTMLButtonElement;
     /** Where the row of controls stands, in the overlay's foot: hidden while the card shows. */
     private readonly actionsHost: HTMLElement;
@@ -86,7 +87,7 @@ export class TaskHubSourceView implements SourceSurface {
         this.issues = new IssueBoard<never>({ field: () => null, form: this.messageEl });
 
         this.lostEl = this.pane.createDiv({ cls: 'task-hub__source-lost' });
-        this.lostEl.createSpan({ text: t('modal.hub.source.lost') });
+        this.lostWhy = this.lostEl.createSpan();
         const copyBtn = this.lostEl.createEl('button', { text: t('modal.hub.source.copy'), attr: { type: 'button' } });
         copyBtn.addEventListener('click', () => {
             const text = actions.draftText();
@@ -130,6 +131,7 @@ export class TaskHubSourceView implements SourceSurface {
         this.messageEl.toggle(open);
         this.pane.toggleClass('tv-source-drafts--asking', asking);
         this.lostEl.toggle(seat?.lost != null);
+        this.lostWhy.setText(seat?.lost?.why ?? '');
         this.lostDiscardBtn.toggle(seat?.lost?.discard ?? false);
         this.actions.render({
             busy,
