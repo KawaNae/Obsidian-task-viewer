@@ -13,7 +13,8 @@ import { t } from '../../../src/i18n';
 import { refusalText } from '../../../src/services/operations/WriteAnswer';
 import { valuesOf } from '../helpers/properties';
 import { FocusDoc, FocusEl, asEl } from '../helpers/focusDom';
-import type { HubHost } from '../../../src/modals/hub/HubHost';
+import type { HubDraft, HubHost } from '../../../src/modals/hub/HubHost';
+import type { Task } from '../../../src/types';
 
 // The icon a button shows, read back from its element.
 vi.mock('obsidian', async (importOriginal) => ({
@@ -655,7 +656,7 @@ describe('the place of a hub on a task not written yet', () => {
         s.press(s.create());
         await s.write({ written: false, refused: null });
 
-        expect(s.host.draft!.canCreate()).toBe(false);
+        expect(s.host.draft().canWrite()).toBe(false);
         expect(s.selected()).toBe('basic');
         expect(s.doc.activeElement).toBe(heading);
     });
@@ -852,7 +853,7 @@ describe('the hub on a row', () => {
             put: async () => true,
             shut: () => null,
             openSource: null,
-            draft: null,
+            draft: () => null,
             closing: () => 'close',
             bind: () => { },
         };
@@ -865,5 +866,162 @@ describe('the hub on a row', () => {
         expect(foot.find('task-hub__create-toggle')).toBeNull();
         form.sayWrite('refused');
         expect(body.find('tv-form__says--form')!.children.map(c => c.text)).toEqual(['refused']);
+    });
+});
+
+/**
+ * A host whose draft comes and goes while the hub is open: the form asks it
+ * again each time it is told to draw it (`showDraft`), and shows cancel, the
+ * write and the line above them only while there is one.
+ */
+describe('a hub whose host comes to hold something not written yet and lets it go', () => {
+    function setUpHeld() {
+        const doc = new FocusDoc();
+        Object.assign(doc, { createElement: () => ({ getContext: () => null }) });
+        const root = doc.root();
+        const body = root.createDiv();
+        const foot = root.createDiv();
+        let held: HubDraft | null = null;
+        const puts: Partial<Task>[] = [];
+        const host: HubHost = {
+            task: () => SIBLING,
+            put: async (updates) => { if (updates) puts.push(updates); return true; },
+            shut: () => null,
+            openSource: null,
+            draft: () => held,
+            closing: () => 'close',
+            bind: () => { },
+        };
+        const app = { keymap: { pushScope: () => { }, popScope: () => { } } } as never;
+        const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present: () => { } } } as never;
+        const index = { getTasks: () => [], getTask: () => undefined, onChange: () => () => { } } as never;
+        const requestClose = vi.fn();
+        const form = new TaskHubForm(asEl(body), host, { app, plugin, index, foot: asEl(foot), requestClose });
+        const draftOf = (label: string, opts: { changed?: boolean; discard?: boolean } = {}) => ({
+            label,
+            busyLabel: `${label}…`,
+            canWrite: () => true,
+            writing: () => false,
+            write: vi.fn(),
+            discard: opts.discard === false ? null : vi.fn(),
+            changed: () => opts.changed ?? false,
+        });
+        return {
+            doc, root, body, foot, form, puts, requestClose, draftOf,
+            /** Hold `draft` now, and tell the form to draw it. */
+            hold: (draft: HubDraft | null) => { held = draft; form.showDraft(); },
+            el: (field: Parameters<TaskHubForm['fieldElement']>[0]) => form.fieldElement(field) as unknown as FocusEl,
+            row: () => foot.find('tv-form__buttons')!,
+            line: () => foot.find('task-hub__create-line'),
+            toggle: () => foot.find('task-hub__create-toggle'),
+            cancel: () => foot.find('tv-form__cancel')!,
+            act: () => foot.findAll('mod-cta')[0] ?? null,
+            ask: () => foot.find('tv-form__ask')?.text ?? '',
+            tab: (id: string) => body.find('tv-tabs')!.findAll('tv-tabs__tab').find(button => button.attrs.get('data-tab') === id)!,
+            selected: () => body.find('tv-tabs')!.findAll('tv-tabs__tab').find(button => button.attrs.get('aria-selected') === 'true')!.attrs.get('data-tab'),
+            press: (target: FocusEl) => target.dispatchEvent(new Event('click')),
+        };
+    }
+    type Held = ReturnType<typeof setUpHeld>;
+    /** What the foot shows: the row, its cancel, its write and what it reads, the line's button, and the line. */
+    const footOf = (s: Held) => ({
+        row: !s.row().hidden,
+        cancel: s.cancel().style.display !== 'none',
+        act: s.act()?.text ?? null,
+        toggle: s.toggle() !== null,
+        line: s.line() !== null && !s.line()!.hidden,
+    });
+    const NONE = { row: false, cancel: false, act: null, toggle: false, line: false };
+    const PLACE_SAID = [{ at: 'form' as const, tone: 'warning' as const, text: 'goes there' }];
+
+    it('shows cancel, the write and the line only while the host holds something, as it answers each time it is told to draw', () => {
+        const s = setUpHeld();
+        s.form.sayPlace(PLACE_SAID);
+        expect(footOf(s)).toEqual(NONE);
+
+        s.hold(s.draftOf('移動'));
+        expect(footOf(s)).toEqual({ row: true, cancel: true, act: '移動', toggle: true, line: true });
+
+        s.hold(s.draftOf('もう一度'));
+        expect(footOf(s)).toEqual({ row: true, cancel: true, act: 'もう一度', toggle: true, line: true });
+
+        s.hold(null);
+        expect(footOf(s)).toEqual(NONE);
+
+        // Held again: each part back in its place, the line over the row, the line's button first, cancel before the write.
+        s.hold(s.draftOf('移動'));
+        expect(footOf(s)).toEqual({ row: true, cancel: true, act: '移動', toggle: true, line: true });
+        const row = s.row();
+        expect(s.foot.children.indexOf(s.line()!)).toBeLessThan(s.foot.children.indexOf(row));
+        expect(row.children[0]).toBe(s.toggle());
+        expect(row.children.at(-1)).toBe(s.act());
+        expect(row.children.indexOf(s.cancel())).toBeLessThan(row.children.indexOf(s.act()!));
+    });
+
+    it('says a refusal above the write while something is held, and above the tabs while nothing is', () => {
+        const s = setUpHeld();
+        s.hold(s.draftOf('移動'));
+        s.form.sayWrite('refused');
+        expect(footOf(s).line).toBe(true);
+        expect(s.body.find('tv-form__says--form')!.children).toEqual([]);
+
+        s.hold(null);
+        s.form.sayWrite('refused again');
+        expect(footOf(s).line).toBe(false);
+        expect(s.body.find('tv-form__says--form')!.children.map(c => c.text)).toEqual(['refused again']);
+    });
+
+    it('keeps what is typed, the focus, the tab chosen and the question put however the draft comes, changes and goes', () => {
+        const s = setUpHeld();
+        s.el('start').focus();
+        s.el('start').type('not a date');
+        expect(s.form.beforeClose()).toBe('stay');
+        const ask = s.ask();
+        expect(ask).not.toBe('');
+        const focused = s.doc.activeElement;
+        expect(focused).toBe(s.cancel());
+        s.press(s.tab('detail'));
+        expect(s.selected()).toBe('detail');
+
+        for (const draft of [s.draftOf('移動'), s.draftOf('もう一度'), null]) {
+            s.hold(draft);
+            expect([s.el('start').value, s.doc.activeElement, s.selected(), s.ask(), s.cancel().text])
+                .toEqual(['not a date', focused, 'detail', ask, t('modal.hub.unsavedFix')]);
+            expect(s.cancel().style.display).toBe('');
+        }
+    });
+
+    it('throws away what is held at cancel with the hub left open, asking first where anything would be lost', () => {
+        const plain = setUpHeld();
+        const nothing = plain.draftOf('移動');
+        plain.hold(nothing);
+        plain.press(plain.cancel());
+        expect(nothing.discard).toHaveBeenCalledTimes(1);
+        expect(plain.requestClose).not.toHaveBeenCalled();
+        expect(plain.ask()).toBe('');
+
+        const given = setUpHeld();
+        const changed = given.draftOf('移動', { changed: true });
+        given.hold(changed);
+        given.el('name').focus();
+        given.el('name').type('電話');
+        given.press(given.cancel());
+        // The fields are saved first, as for a close: what is typed is in what is thrown away.
+        expect(given.puts).toEqual([{ content: '電話' }]);
+        expect(given.ask()).toBe(t('modal.newTask.discardAsk'));
+        expect(changed.discard).not.toHaveBeenCalled();
+
+        given.press(given.foot.find('tv-form__discard')!);
+        expect(changed.discard).toHaveBeenCalledTimes(1);
+        expect(given.requestClose).not.toHaveBeenCalled();
+        expect(given.ask()).toBe('');
+    });
+
+    it('closes as × at cancel where what is held is all the hub is', () => {
+        const s = setUpHeld();
+        s.hold(s.draftOf('作成', { changed: true, discard: false }));
+        s.press(s.cancel());
+        expect(s.requestClose).toHaveBeenCalledTimes(1);
+        expect(s.ask()).toBe('');
     });
 });

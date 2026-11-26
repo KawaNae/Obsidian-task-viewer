@@ -25,7 +25,7 @@ export interface DraftHostDeps {
  * The host of a hub on a task not written yet, to be put in `place`, or in
  * a place the user chooses in its place fields when it opens on none: what
  * the fields hand on is put over the draft at once (`applyToDraft`), and
- * nothing is written until a create is asked (`HubDraft.create`), which puts
+ * nothing is written until a create is asked (`create`), which puts
  * the task's line and its property lines in with one write.
  *
  * - What the place is, and what a line there inherits, is asked of the vault
@@ -53,7 +53,7 @@ export interface DraftHostDeps {
  *   written, and would be lost as the hub closes), the create reads as
  *   creating, and a close asked meanwhile waits for its end. Asked while the
  *   fields or the place are being read, it waits for them; once they have
- *   answered, it is asked of the form again (`HubForm.create`), the fields
+ *   answered, it is asked of the form again (`HubForm.write`), the fields
  *   open, so the dates are seen under what the place gives now (a field
  *   they break takes the focus, and nothing is written), and it ends
  *   unwritten where the task cannot go or the place could not be read, why
@@ -61,7 +61,7 @@ export interface DraftHostDeps {
  * - Written, the hub closes; refused, why is said above the create once,
  *   with no notice, and the place is asked again. A refusal that comes after
  *   the hub closed otherwise is told by a notice.
- * - A create ended unwritten is told to the form once (`notCreated`), the
+ * - A create ended unwritten is told to the form once (`notWritten`), the
  *   fields open and nothing being read, a refused create's place asked
  *   again first: the form puts the focus by whether a create may be asked
  *   then. Not where the form found a field to fix (it focused it), nor once
@@ -74,7 +74,7 @@ export interface DraftHostDeps {
  *   (`shown`), drawn again as the form is.
  * - There is no row whose lines could be opened (`openSource` null).
  */
-export class DraftHost implements PanelHost, HubDraft {
+export class DraftHost implements PanelHost {
     private value: Task;
     /** The task as it opened: what {@link changed} compares with. */
     private readonly opened: Task;
@@ -99,7 +99,7 @@ export class DraftHost implements PanelHost, HubDraft {
     private making: Making | null = null;
     /**
      * A create ended unwritten, and the form is yet to be told so
-     * (`HubForm.notCreated`): it is told once nothing is being read, so it
+     * (`HubForm.notWritten`): it is told once nothing is being read, so it
      * puts the focus by the place as it is then, a refused create's place
      * asked again first.
      */
@@ -112,7 +112,19 @@ export class DraftHost implements PanelHost, HubDraft {
     private closed = false;
 
     readonly openSource = null;
-    readonly draft: HubDraft = this;
+    /**
+     * The task not written yet, as the form sees it: always held, its write
+     * the create. Throwing it away is closing the hub, which is nothing but it.
+     */
+    private readonly asDraft: HubDraft = {
+        label: t('modal.create'),
+        busyLabel: t('modal.newTask.creating'),
+        canWrite: () => this.canCreate(),
+        writing: () => this.creating(),
+        write: () => this.create(),
+        discard: null,
+        changed: () => this.changed(),
+    };
 
     constructor(place: CreatePlace | null, seed: DraftSeed, private readonly deps: DraftHostDeps) {
         this.place = place;
@@ -124,6 +136,10 @@ export class DraftHost implements PanelHost, HubDraft {
 
     task(): Task {
         return this.value;
+    }
+
+    draft(): HubDraft {
+        return this.asDraft;
     }
 
     /**
@@ -258,7 +274,7 @@ export class DraftHost implements PanelHost, HubDraft {
             this.making = null;
             this.form?.showShut();
             const offered = this.canCreate();
-            if (offered) this.form?.create();
+            if (offered) this.form?.write();
             const again = this.making as Making | null;
             if (again) {
                 void again.done.then(waited.end);
@@ -271,7 +287,7 @@ export class DraftHost implements PanelHost, HubDraft {
         }
         if (!this.unwritten) return;
         this.unwritten = false;
-        this.form?.notCreated();
+        this.form?.notWritten();
     }
 
     /** End the create waiting for a read unwritten, why said above it: the read failed. */

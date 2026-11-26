@@ -59,6 +59,8 @@ export class FocusEl {
     scrollTop = 0;
     scrollWidth = 0;
     scrollHeight = 0;
+    /** Hidden by its attribute, as the overlay's foot reads its rows. */
+    hidden = false;
 
     constructor(readonly ownerDocument: FocusDoc, cls = '') {
         cls.split(/\s+/).filter(Boolean).forEach(c => this.classes.add(c));

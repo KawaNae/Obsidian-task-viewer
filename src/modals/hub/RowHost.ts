@@ -149,8 +149,10 @@ export class RowHost implements PanelHost {
         this.panel?.close();
     };
 
-    /** Each change is written as it comes: nothing to create. */
-    readonly draft = null;
+    /** Each change is written as it comes: nothing held to write. */
+    draft(): null {
+        return null;
+    }
 
     /**
      * All written, the hub closes; one refused, it stays open with why above

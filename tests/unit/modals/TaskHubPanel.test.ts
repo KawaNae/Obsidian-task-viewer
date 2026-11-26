@@ -30,7 +30,7 @@ import { TFile } from '../mocks/obsidian';
 
 const { shells, forms, sources, views, panes, paneHas } = vi.hoisted(() => ({
     shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown; initialFocus?: () => unknown } | null; close(): void }[],
-    forms: [] as { el: unknown; host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn>; focusOf: ReturnType<typeof vi.fn>; notCreated: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
+    forms: [] as { el: unknown; host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn>; focusOf: ReturnType<typeof vi.fn>; notWritten: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     views: [] as { slots: Record<string, unknown> }[],
     panes: [] as { el: unknown; input: unknown; opts: { initial: unknown; host: unknown }; setEnabled: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
@@ -79,7 +79,7 @@ vi.mock('../../../src/modals/hub/TaskHubForm', () => ({
         sayWrite() { }
         sayPlace() { }
         create() { }
-        notCreated = vi.fn();
+        notWritten = vi.fn();
         dispose = vi.fn(() => { this.place?.dispose(); });
     },
 }));
@@ -358,20 +358,20 @@ describe('the hub on a task not written yet, its place', () => {
         const facts = vi.fn(places.facts);
         const create = vi.fn(async (): Promise<WriteAnswer> => ({ written: false, refused: null }));
         await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places: { ...places, facts, create } as unknown as CreatePlaces, notePlaces });
-        const draft = (forms[0].host as PanelHost).draft!;
+        const draft = (forms[0].host as PanelHost).draft()!;
         await Promise.resolve();
         await Promise.resolve();
-        expect(draft.canCreate()).toBe(true);
+        expect(draft.canWrite()).toBe(true);
 
         facts.mockResolvedValueOnce({
             kind: 'note', path: '2031-01-15.md', spot: { heading: 'Tasks', level: 2, side: 'head' },
             note: 'existing', seed: 'daily', heading: { kind: 'many', count: 2 }, ignored: false, inherits: {},
         });
-        draft.create();
+        draft.write();
         for (let i = 0; i < 6; i++) await Promise.resolve();
 
-        expect(draft.canCreate()).toBe(false);
-        expect(forms[0].notCreated).toHaveBeenCalledTimes(1);
+        expect(draft.canWrite()).toBe(false);
+        expect(forms[0].notWritten).toHaveBeenCalledTimes(1);
     });
 
     it('reads the place\'s fields with a new note\'s folder reckoned from no note', async () => {
@@ -389,9 +389,9 @@ describe('the hub on a task not written yet, its place', () => {
         const facts = vi.fn(places.facts);
         await TaskHubPanel.openDraftHub(r.app, null, {}, { ...r.deps, places: { ...places, facts } as unknown as CreatePlaces, notePlaces });
         const host = panes[0].opts.host as PlaceFieldsHost;
-        const draft = (forms[0].host as PanelHost).draft!;
+        const draft = (forms[0].host as PanelHost).draft()!;
         expect(facts).not.toHaveBeenCalled();
-        expect(draft.canCreate()).toBe(false);
+        expect(draft.canWrite()).toBe(false);
 
         host.reading();
         host.answered({ kind: 'to', to: { note: { kind: 'existing', path: '2031-01-15.md' }, spot: { heading: 'Tasks', level: 2, side: 'head' } } });
@@ -399,7 +399,7 @@ describe('the hub on a task not written yet, its place', () => {
         await Promise.resolve();
 
         expect(facts).toHaveBeenCalledWith(PLACE);
-        expect(draft.canCreate()).toBe(true);
+        expect(draft.canWrite()).toBe(true);
     });
 
     it('lets the form, and the place with it, go as it closes', async () => {

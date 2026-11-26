@@ -38,6 +38,12 @@ export interface FormAsk {
  * A form may put a control of its own at the row's start (`lead`), apart
  * from the buttons at its end. It steps aside while the row asks: the
  * question takes the start, and a line to itself.
+ *
+ * A form whose act comes and goes as it stands (the hub, holding something
+ * not written yet or not) says at each draw whether the row offers its
+ * lead, cancel and acts (`offered`), and what its act reads (`act`). Not
+ * offered, the row is as one built with none: the lead and the acts are
+ * taken out of it, cancel is hidden, and it shows only while it asks.
  */
 export class FormActions {
     /** Cancel, or back while asking: what the focus goes to as a question is put. */
@@ -51,6 +57,8 @@ export class FormActions {
     private readsBack = false;
     /** What the answer that keeps reads for the question last drawn; the ask's own label when it gave none. */
     private keepLabel: string | null = null;
+    /** Whether the lead, cancel and the acts are offered, as the last draw said: the lead and the acts are in the row only then. */
+    private offered = true;
 
     constructor(container: HTMLElement, private readonly spec: {
         cancel?: { label?: string; run(): void };
@@ -82,9 +90,21 @@ export class FormActions {
      * `ctaEnabled` (what the form holds can be acted on: a value that reads).
      * `ask` is the question put now, null while none is; `keep` what its
      * answer that keeps reads, when it is not the ask's `keepLabel`.
+     * `offered` false takes the lead and the acts out of the row and hides
+     * cancel (the question and its answers stay); none, they are offered. `act` is what the form's act
+     * reads now, and while busy, in place of what it was built with.
      */
-    render(state: { busy: boolean; ctaEnabled?: boolean; ask?: string | null; keep?: string }): void {
+    render(state: {
+        busy: boolean;
+        ctaEnabled?: boolean;
+        ask?: string | null;
+        keep?: string;
+        offered?: boolean;
+        act?: { label: string; busyLabel?: string };
+    }): void {
         const question = this.spec.ask ? state.ask ?? null : null;
+        const offered = state.offered ?? true;
+        if (offered !== this.offered) this.offer(offered);
         this.readsBack = question !== null;
         this.keepLabel = state.keep ?? null;
         this.askEl?.setText(question ?? '');
@@ -92,13 +112,15 @@ export class FormActions {
         this.askEl?.toggle(this.readsBack);
         this.discardButton?.toggle(this.readsBack);
         this.cancelButton.setText(this.cancelLabel());
-        this.cancelButton.toggle(this.readsBack || this.spec.cancel !== undefined);
+        const cancels = offered && this.spec.cancel !== undefined;
+        this.cancelButton.toggle(this.readsBack || cancels);
         for (const { el, spec } of this.buttons) {
+            const act = spec.tone === 'cta' ? state.act ?? spec : spec;
             el.disabled = state.busy || (spec.tone === 'cta' && state.ctaEnabled === false);
-            el.setText(state.busy && spec.busyLabel ? spec.busyLabel : spec.label);
+            el.setText(state.busy && act.busyLabel ? act.busyLabel : act.label);
         }
         // Hidden by its attribute, which the overlay's foot reads to show or not (`OverlayFrame`).
-        this.row.hidden = !(this.readsBack || this.spec.cancel !== undefined || this.buttons.length > 0);
+        this.row.hidden = !(this.readsBack || cancels || (offered && this.buttons.length > 0));
     }
 
     /** The question was put, first or again: the answer that keeps takes the focus. */
@@ -114,6 +136,19 @@ export class FormActions {
     /** The form's act (`'cta'`), shown or not: a form that cannot act now has no act to offer. */
     showAct(shown: boolean): void {
         for (const { el, spec } of this.buttons) if (spec.tone === 'cta') el.toggle(shown);
+    }
+
+    /** Put the lead back at the row's start and the acts at its end, or take them out of it. */
+    private offer(offered: boolean): void {
+        this.offered = offered;
+        const lead = this.leadEl;
+        if (offered) {
+            if (lead) this.row.insertBefore(lead, this.row.children[0] ?? null);
+            for (const { el } of this.buttons) this.row.appendChild(el);
+            return;
+        }
+        if (lead) this.row.removeChild(lead);
+        for (const { el } of this.buttons) this.row.removeChild(el);
     }
 
     private cancelLabel(): string {

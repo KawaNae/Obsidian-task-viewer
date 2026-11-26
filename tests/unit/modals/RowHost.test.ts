@@ -79,8 +79,8 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         sayWrite(refusal) { this.said.push(refusal); },
         sayPlace: vi.fn(),
         showDraft: vi.fn(),
-        create: vi.fn(),
-        notCreated: vi.fn(),
+        write: vi.fn(),
+        notWritten: vi.fn(),
     };
     if (bound) host.bind(form);
     const panel: HubPanel = {

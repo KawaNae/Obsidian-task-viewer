@@ -82,9 +82,9 @@ function rig(seed: Parameters<typeof makeHost>[0] = {}, place: CreatePlace | nul
         sayPlace(issues) { this.place.push(issues); },
         showDraft: vi.fn(() => { told.push(`draft:${host.canCreate()}:${host.creating()}`); }),
         // The form's create, its fields all saved: it asks the host's.
-        create: vi.fn(() => { host.create(); }),
+        write: vi.fn(() => { host.create(); }),
         // Told with whether the fields are open and whether a create may be asked then.
-        notCreated: vi.fn(() => { told.push(`unwritten:${host.shut() === null}:${host.canCreate()}`); }),
+        notWritten: vi.fn(() => { told.push(`unwritten:${host.shut() === null}:${host.canCreate()}`); }),
     };
     const panel = { redrawPreview: vi.fn(() => { told.push('card'); }), close: vi.fn() };
     host.bind(form);
@@ -459,7 +459,7 @@ describe('DraftHost moved by the place fields', () => {
         expect(r.places.create).not.toHaveBeenCalled();
         await r.answer(daily({ path: 'other.md' }));
 
-        expect(r.form.create).toHaveBeenCalledTimes(1);
+        expect(r.form.write).toHaveBeenCalledTimes(1);
         expect(r.places.create).toHaveBeenCalledTimes(1);
         expect(r.places.create.mock.calls[0][0]).toEqual(OTHER);
         expect(r.rows[0].line.trimEnd()).toBe('- [ ]');
@@ -499,11 +499,11 @@ describe('DraftHost moved by the place fields', () => {
         r.host.reading();
         r.host.create();
         // The form's second look finds a date the place's inherits now break: it asks no create.
-        vi.mocked(r.form.create).mockImplementationOnce(() => { r.told.push(`form create:${r.host.shut() !== null}`); });
+        vi.mocked(r.form.write).mockImplementationOnce(() => { r.told.push(`form create:${r.host.shut() !== null}`); });
         r.told.length = 0;
         r.host.answered(to('2031-01-15.md'));
 
-        expect(r.form.create).toHaveBeenCalledTimes(1);
+        expect(r.form.write).toHaveBeenCalledTimes(1);
         expect(r.places.create).not.toHaveBeenCalled();
         expect(r.host.creating()).toBe(false);
         expect(r.host.shut()).toBeNull();
@@ -532,7 +532,7 @@ describe('DraftHost moved by the place fields', () => {
         await r.answer(daily({ path: 'other.md', heading: { kind: 'many', count: 2 } }));
 
         expect(r.places.create).not.toHaveBeenCalled();
-        expect(r.form.create).not.toHaveBeenCalled();
+        expect(r.form.write).not.toHaveBeenCalled();
         expect(r.host.creating()).toBe(false);
         expect(r.host.shut()).toBeNull();
         expect(r.told.slice(-2)).toEqual(['draft:false:false', 'unwritten:true:false']);
@@ -796,11 +796,11 @@ describe('DraftHost, a create ending unwritten', () => {
         await r.answer();
         r.host.reading();
         r.host.create();
-        vi.mocked(r.form.create).mockImplementationOnce(() => { });
+        vi.mocked(r.form.write).mockImplementationOnce(() => { });
         r.host.answered(to('2031-01-15.md'));
 
         expect(r.host.creating()).toBe(false);
-        expect(r.form.notCreated).not.toHaveBeenCalled();
+        expect(r.form.notWritten).not.toHaveBeenCalled();
     });
 
     it('tells the form once a refused create\'s place has been asked again, not before, a create offered still', async () => {
@@ -886,7 +886,7 @@ describe('DraftHost, a create ending unwritten', () => {
         await written.answer();
         written.host.create();
         await written.write({ written: true });
-        expect(written.form.notCreated).not.toHaveBeenCalled();
+        expect(written.form.notWritten).not.toHaveBeenCalled();
 
         const closedAsked = rig();
         closedAsked.open();
@@ -895,7 +895,7 @@ describe('DraftHost, a create ending unwritten', () => {
         await closedAsked.write({ written: false, refused: REFUSED });
         closedAsked.host.dispose();
         await closedAsked.answer();
-        expect(closedAsked.form.notCreated).not.toHaveBeenCalled();
+        expect(closedAsked.form.notWritten).not.toHaveBeenCalled();
 
         const closedWaiting = rig();
         closedWaiting.open();
@@ -904,7 +904,7 @@ describe('DraftHost, a create ending unwritten', () => {
         closedWaiting.host.create();
         closedWaiting.host.dispose();
         closedWaiting.host.answered(EMPTY);
-        expect(closedWaiting.form.notCreated).not.toHaveBeenCalled();
+        expect(closedWaiting.form.notWritten).not.toHaveBeenCalled();
     });
 
     it('tells the form nothing of a place read with no create ended', async () => {
@@ -915,7 +915,7 @@ describe('DraftHost, a create ending unwritten', () => {
         await r.answer(daily({ path: 'other.md', heading: { kind: 'many', count: 2 } }));
         r.host.answered(EMPTY);
 
-        expect(r.form.notCreated).not.toHaveBeenCalled();
+        expect(r.form.notWritten).not.toHaveBeenCalled();
     });
 });
 
