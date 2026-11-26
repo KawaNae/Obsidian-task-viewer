@@ -47,8 +47,36 @@ class MockFocusable {
     }
 }
 
+/** The overlay's body: it scrolls, and holds the field where the test puts it (`field.offset`, from the body's content top). */
+class MockBody {
+    scrollTop = 0;
+    readonly clientTop = 0;
+    readonly clientHeight = 400;
+    /** Whether the field is in the body; else it is in the panel's head or foot. */
+    holdsField = true;
+    constructor(private readonly field: () => MockField) {}
+    getBoundingClientRect() { return { top: 100, bottom: 100 + this.clientHeight }; }
+    scrollTo({ top }: { top: number }) { this.scrollTop = top; }
+    contains(node: unknown) { return this.holdsField && node === this.field(); }
+}
+
 /** A text field: what of its text is selected, and how far it is scrolled in itself. */
 class MockField extends MockFocusable {
+    readonly nodeType = 1;
+    /** Where it stands in the body's content, and its height (px). */
+    offset = 0;
+    readonly height = 30;
+    body: MockBody | null = null;
+    /** The body's scrollTop as the field took the focus. */
+    scrolledAtFocus: number | null = null;
+    getBoundingClientRect() {
+        const top = 100 + this.offset - (this.body?.scrollTop ?? 0);
+        return { top, bottom: top + this.height };
+    }
+    override focus(options?: FocusOptions) {
+        this.scrolledAtFocus = this.body?.scrollTop ?? null;
+        super.focus(options);
+    }
     value = 'とても長い名前';
     /** Where the browser puts the caret of a field focused by script: at its start. */
     selectionStart: number | null = 0;
@@ -116,18 +144,21 @@ function setup(opts: { selection?: SelectionOnFocus } = {}) {
     const doc = new MockDocument();
     const panel = new MockFocusable(doc);
     const field = new MockField(doc);
+    const body = new MockBody(() => field);
+    field.body = body;
     /** Another part of the surface: a button, another field. */
     const other = new MockFocusable(doc);
     const outside = new MockFocusable(doc);
     const state = { current: true, target: { to: field, selection: opts.selection ?? 'all' } as FieldFocus | null };
     const overlay: OpeningOverlay = {
         panel: panel as unknown as HTMLElement,
+        body: body as unknown as HTMLElement,
         doc: doc as unknown as Document,
         isCurrent: () => state.current,
         holds: (node) => node === (panel as unknown) || node === (field as unknown) || node === (other as unknown),
         target: () => state.target,
     };
-    return { doc, panel, field, other, outside, state, place: () => placeFirstFocus(overlay) };
+    return { doc, panel, field, body, other, outside, state, place: () => placeFirstFocus(overlay) };
 }
 
 afterEach(() => {
@@ -287,6 +318,36 @@ describe('placeFirstFocus', () => {
             await flush();
 
             expect(doc.activeElement).toBe(panel);
+        });
+
+        it('brings a field below the body\'s bottom into its sight before it takes the focus, and leaves the body for one in sight', async () => {
+            const opening = standInOpening();
+            const s = setup();
+            s.field.offset = 900;
+            s.place();
+            opening.opened();
+            await flush();
+            // Its bottom at the body's bottom, scrolled before the focus.
+            expect(s.body.scrollTop).toBe(900 + 30 - 400);
+            expect(s.field.scrolledAtFocus).toBe(530);
+            expect(s.doc.activeElement).toBe(s.field);
+
+            const again = setup();
+            again.field.offset = 120;
+            again.place();
+            await flush();
+            expect(again.body.scrollTop).toBe(0);
+            expect(again.doc.activeElement).toBe(again.field);
+        });
+
+        it('scrolls nothing for a field outside the body (the panel\'s head or foot)', async () => {
+            const s = setup();
+            s.body.holdsField = false;
+            s.field.offset = 900;
+            s.place();
+            await flush();
+            expect(s.body.scrollTop).toBe(0);
+            expect(s.doc.activeElement).toBe(s.field);
         });
 
         it('puts the caret after the text once opened, as the body asks', async () => {

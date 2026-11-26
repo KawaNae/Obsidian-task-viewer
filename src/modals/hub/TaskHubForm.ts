@@ -741,9 +741,14 @@ export class TaskHubForm implements HubForm {
         if (to) this.focusTo(to);
     }
 
+    focusPlace(): void {
+        this.focusField('place');
+    }
+
     /**
      * Put the focus on a field of the form, its tab chosen first: a field in
-     * a tab not chosen takes no focus.
+     * a tab not chosen takes no focus. The browser scrolls the body for it
+     * as it takes the focus.
      */
     private focusTo(focus: FieldFocus<HTMLElement>): void {
         this.tabs.reveal(focus.to);

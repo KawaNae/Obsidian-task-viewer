@@ -89,6 +89,7 @@ describe('giveFocusBack', () => {
         const next = new MockElement(s.doc);
         const opening: OpeningOverlay = {
             panel: panel as unknown as HTMLElement,
+            body: { contains: () => false } as unknown as HTMLElement,
             doc: s.doc as unknown as Document,
             isCurrent: () => true,
             holds: (node) => node === (panel as unknown) || node === (next as unknown),

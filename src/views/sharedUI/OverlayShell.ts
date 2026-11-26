@@ -66,6 +66,7 @@ import { watchKeyboard } from '../../utils/KeyboardWatch';
 import { runningAnimations, whenStopped } from '../../utils/Animations';
 import { focusField, type FieldFocus, type Focusable } from '../../utils/FieldFocus';
 import { placeFocus } from './FocusPlacement';
+import { bringIntoView } from './BodySight';
 import { t } from '../../i18n';
 
 export type OverlayMode = 'anchored' | 'centered';
@@ -101,8 +102,9 @@ export interface OverlayOpenOpts {
      * its open animation has ended and the plugin's menus have gone, the
      * panel holding the focus until then (`placeFirstFocus`). The body says how a text field's text is met
      * there, all of it selected or the caret after it, as the field's kind
-     * asks: the shell knows no field. Not given, or naming nothing, the
-     * panel itself takes the focus.
+     * asks: the shell knows no field. A field in the body is brought into
+     * the body's sight first. Not given, or naming nothing, the panel itself
+     * takes the focus.
      */
     initialFocus?: () => FieldFocus | null;
     onClose?: () => void;
@@ -170,6 +172,8 @@ export function takeEscape(
 /** An overlay opening, as its first focus sees it (`placeFirstFocus`). */
 export interface OpeningOverlay {
     panel: HTMLElement;
+    /** The part of the panel that scrolls, between its head and its foot. */
+    body: HTMLElement;
     doc: Document;
     /** Whether the overlay is still open on this panel: not closed, nor opened again on another body. */
     isCurrent: () => boolean;
@@ -232,6 +236,13 @@ export function watchOpening(win: Window, parts: readonly Element[], atFrame: ()
  * which raises no keyboard and keeps the hotkeys out. The focus the user
  * moved meanwhile to another part of the surface is left there, and an
  * overlay closed or opened again meanwhile is not focused.
+ *
+ * The field is focused without the browser's scroll, which on iOS scrolls
+ * the window's visual viewport for it too: a field in the body is brought
+ * into the body's sight first (`bringIntoView`), so a field below the body's
+ * bottom (the hub opened on a field under a tall card, on a phone's sheet)
+ * stands where it can be seen, and a keyboard rising for it moves the body
+ * from there (`KeyboardRoom`).
  */
 export function placeFirstFocus(overlay: OpeningOverlay): void {
     if (!overlay.isCurrent()) return;
@@ -251,9 +262,13 @@ export function placeFirstFocus(overlay: OpeningOverlay): void {
  * (`focusField`), and on the panel when it names nothing or the focus did
  * not go into the surface (an element hidden, or disabled).
  */
-function focusFirst({ panel, doc, holds, target }: OpeningOverlay): void {
+function focusFirst({ panel, body, doc, holds, target }: OpeningOverlay): void {
     const to = target();
-    if (to) focusField(to, { preventScroll: true });
+    if (to) {
+        const field = to.to as Partial<Node>;
+        if (typeof field.nodeType === 'number' && body.contains(field as Node)) bringIntoView(body, field as Element);
+        focusField(to, { preventScroll: true });
+    }
     if (!holds(doc.activeElement)) panel.focus({ preventScroll: true });
 }
 
@@ -432,6 +447,7 @@ export class OverlayShell implements ClosableOverlay {
         const initialFocus = opts.initialFocus;
         this.openingWatch = watchOpening(hostWin, [backdrop, panel], () => placeFirstFocus({
             panel,
+            body,
             doc: hostDoc,
             isCurrent: () => this.panelEl === panel,
             holds: (node) => this.holds(node),

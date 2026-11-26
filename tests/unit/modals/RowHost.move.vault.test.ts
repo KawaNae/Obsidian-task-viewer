@@ -104,6 +104,7 @@ async function open(lines: string[] = NOTE, opts: { opening?: MoveStart; beforeA
         putTyped: vi.fn(() => { told.push('typed'); return typed; }),
         notWritten: vi.fn(),
         edited: vi.fn(),
+        focusPlace: vi.fn(() => { told.push('focus'); }),
     };
     host.bind(form);
     const panel: HubPanel = { redrawPreview: vi.fn(() => { told.push('card'); }), close: vi.fn() };
@@ -144,11 +145,13 @@ describe('beginning a move', () => {
         expect(h.move().initial).toEqual({ note: { text: 'note', picked: FILE }, heading: 'Tasks' });
     });
 
-    it('draws the form, the card and the row of buttons once the host holds the move, which reads as the send dialog\'s', async () => {
+    it('draws the form, the card and the row of buttons once the host holds the move, which reads as the send dialog\'s, and then puts the focus on the place', async () => {
         const h = await open();
         h.told.length = 0;
         await h.host.beginMove('here');
-        expect(h.told.slice(-4)).toEqual(['shut:null', 'refresh', 'card', 'draft:true']);
+        // The row of buttons and the line above [Move] shrink the body: the focus is put once they are drawn.
+        expect(h.told.slice(-5)).toEqual(['shut:null', 'refresh', 'card', 'draft:true', 'focus']);
+        expect(h.form.focusPlace).toHaveBeenCalledTimes(1);
         expect(h.put).toEqual([null]);
         expect(h.host.draft()).toMatchObject({ label: t('modal.send.send'), busyLabel: t('modal.send.sending') });
     });
@@ -161,6 +164,7 @@ describe('beginning a move', () => {
         expect(h.host.draft()).toBeNull();
         expect(preview).not.toHaveBeenCalled();
         expect(h.source.hold.mock.calls).toEqual([[true], [false]]);
+        expect(h.form.focusPlace).not.toHaveBeenCalled();
 
         const g = await open();
         vi.spyOn(g.noteOps, 'previewSend').mockResolvedValueOnce(null);
@@ -480,6 +484,8 @@ describe('a hub opened in a move', () => {
         // The move draws itself as it is made, before the host holds it (`draft:false`), then is drawn again.
         expect(h.told.slice(0, 5)).toEqual(['draft:false', 'shut:null', 'refresh', 'card', 'draft:true']);
         expect(h.form.putTyped).not.toHaveBeenCalled();
+        // The overlay's first focus goes to the place: the host puts none.
+        expect(h.form.focusPlace).not.toHaveBeenCalled();
         // Nothing to hold: the move is the hub's as it opens, and the switch is drawn on its seat.
         expect(h.source.hold).not.toHaveBeenCalled();
         expect(h.host.seat()).toBe(h.move().seat);

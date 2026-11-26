@@ -103,6 +103,7 @@ async function open(lines: string[] = NOTE, opts: { opening?: boolean } = {}) {
         putTyped: vi.fn(() => typed),
         notWritten: vi.fn(),
         edited: vi.fn(),
+        focusPlace: vi.fn(),
     };
     host.bind(form);
     const panel: HubPanel = { redrawPreview: vi.fn(() => { told.push('card'); }), close: vi.fn() };

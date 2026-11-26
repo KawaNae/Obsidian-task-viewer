@@ -89,7 +89,7 @@ describe('out of a move', () => {
 });
 
 describe('in a move', () => {
-    it('puts the destination\'s fields in the shown place\'s stead, on where the move opened, the parent\'s row gone, the focus on the note', () => {
+    it('puts the destination\'s fields in the shown place\'s stead, on where the move opened, the parent\'s row gone, answering the note as its focus and putting none', () => {
         const s = setUp();
         const move = s.made();
         s.moveTo(move);
@@ -100,7 +100,8 @@ describe('in a move', () => {
         const note = s.place.focus()!.to as unknown as FocusEl;
         expect(group.contains(note)).toBe(true);
         expect(note.value).toBe('note');
-        expect(s.doc.activeElement).toBe(note);
+        // The host puts it once the rest of the move is drawn (`HubForm.focusPlace`).
+        expect(s.doc.activeElement).not.toBe(note);
         expect(move.show).toHaveBeenCalledWith(s.place);
     });
 
