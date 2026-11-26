@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TabStrip } from '../../../../src/views/sharedUI/TabStrip';
-import { FocusDoc, asEl, type FocusEl } from '../../helpers/focusDom';
+import { FocusDoc, FocusEl, asEl } from '../../helpers/focusDom';
 
 /**
  * A row of tabs over the panes they choose between, in a stand-in DOM
@@ -11,7 +11,8 @@ import { FocusDoc, asEl, type FocusEl } from '../../helpers/focusDom';
  * no focus out of an `inert` pane, so the marks are what is read. A focus
  * in the pane left goes to the button of the tab chosen; one on the row
  * stays. A tab is chosen for an element in its pane (`reveal`), the focus
- * left to the caller who puts it there.
+ * left to the caller who puts it there. A row narrower than its tabs is
+ * scrolled until the button of the tab chosen is in its sight.
  */
 
 type Tab = 'one' | 'two' | 'three';
@@ -220,5 +221,48 @@ describe('TabStrip', () => {
         expect(s.strip.reveal(asEl(s.buttons[2]))).toBe(false);
         expect(s.strip.selected).toBe('one');
         expect(s.onSelect).not.toHaveBeenCalled();
+    });
+
+    describe('in a row narrower than its tabs', () => {
+        afterEach(() => { vi.restoreAllMocks(); });
+
+        /** A row 150px wide over tabs 100px wide each, scrolled by its scrollLeft. */
+        function narrowRow() {
+            vi.spyOn(FocusEl.prototype, 'getBoundingClientRect').mockImplementation(function (this: FocusEl) {
+                if (this.classes.has('tv-tabs')) return { left: 0, right: 150, top: 0, bottom: 40 };
+                if (this.classes.has('tv-tabs__tab')) {
+                    const left = this.parent!.children.indexOf(this) * 100 - this.parent!.scrollLeft;
+                    return { left, right: left + 100, top: 0, bottom: 40 };
+                }
+                return { left: 0, right: 0, top: 0, bottom: 0 };
+            });
+        }
+
+        it('is scrolled to the button of the tab it opens on', () => {
+            narrowRow();
+            const s = setUp('three');
+            expect(s.list.scrollLeft).toBe(150);
+        });
+
+        it('is scrolled to the button of each tab chosen, by the arrows round the ends, Home and a click, no further than it shows', () => {
+            narrowRow();
+            const s = setUp();
+            expect(s.list.scrollLeft).toBe(0);
+            s.key(s.buttons[0], 'ArrowLeft');
+            expect(s.list.scrollLeft).toBe(150);
+            s.key(s.buttons[2], 'ArrowLeft');
+            expect(s.list.scrollLeft).toBe(100);
+            s.key(s.buttons[1], 'Home');
+            expect(s.list.scrollLeft).toBe(0);
+            s.press(s.buttons[1]);
+            expect(s.list.scrollLeft).toBe(50);
+        });
+    });
+
+    it('leaves a row as wide as its tabs where it is', () => {
+        const s = setUp();
+        s.press(s.buttons[2]);
+        s.key(s.buttons[2], 'Home');
+        expect(s.list.scrollLeft).toBe(0);
     });
 });

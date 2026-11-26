@@ -79,6 +79,14 @@ export class Modal {
     onClose() {}
 }
 
+export class PluginSettingTab {
+    /** What the tab draws into; a test puts its own element here. */
+    containerEl = {} as any;
+    constructor(public app: App, public plugin: Plugin) {}
+    display(): void {}
+    hide(): void {}
+}
+
 export class ItemView {
     app: App = new App();
     containerEl = { empty() {}, createDiv() { return {}; } } as any;

@@ -126,6 +126,11 @@ export class FocusEl {
     setAttribute(k: string, v: string): void { this.attrs.set(k, v); }
     removeAttribute(k: string): void { this.attrs.delete(k); }
 
+    /** Whether the element is under the document's body. */
+    get isConnected(): boolean {
+        return this.ownerDocument.body.contains(this);
+    }
+
     contains(el: FocusEl | null): boolean {
         for (let at = el; at; at = at.parent) if (at === this) return true;
         return false;

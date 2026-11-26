@@ -1,6 +1,6 @@
 import { setIcon } from 'obsidian';
 
-/** A tab: its id, the name it shows, and an icon before the name (Obsidian's icon name). */
+/** A tab: its id, the name it shows, and an icon before the name (Obsidian's icon name), if it has one. */
 export interface TabSpec<K extends string> {
     id: K;
     label: string;
@@ -24,6 +24,12 @@ let built = 0;
  * - The row and the element of the panes (`tv-tabs__panes`) are built in
  *   that order at the end of the parent, for the stylesheet of the place it
  *   is used in to find them there.
+ * - The row is as wide as its place. Where it lays its tabs wider than
+ *   that and scrolls (a place's stylesheet may), the button of the tab
+ *   chosen is scrolled into the row's sight, as the strip is built, as
+ *   another is chosen, and as the row's width changes (the panes' contents
+ *   drawn after the strip may give its place a scrollbar): the row alone is
+ *   scrolled, not what holds it.
  * - Each tab is a `button` (`role="tab"`) naming its tab's id (`data-tab`),
  *   so a tab is found by what it is, not by the ids the strip numbers. Enter
  *   and Space choose it as a button's own keys; the arrows go to the next
@@ -45,6 +51,7 @@ let built = 0;
  *   its button, as the arrows do, for a caller with no field to put it on.
  */
 export class TabStrip<K extends string> {
+    private readonly list: HTMLElement;
     private readonly tabs = new Map<K, { button: HTMLElement; pane: HTMLElement }>();
     private readonly order: K[];
     private current: K;
@@ -52,7 +59,7 @@ export class TabStrip<K extends string> {
     /** Build at the end of `parent` the row of tabs, and after it the element of a pane for each tab. */
     constructor(parent: HTMLElement, specs: readonly TabSpec<K>[], private readonly opts: TabStripOptions<K>) {
         const prefix = `tv-tabs-${++built}`;
-        const list = parent.createDiv({ cls: 'tv-tabs' });
+        const list = this.list = parent.createDiv({ cls: 'tv-tabs' });
         list.setAttribute('role', 'tablist');
         const panes = parent.createDiv({ cls: 'tv-tabs__panes' });
         this.order = specs.map(spec => spec.id);
@@ -75,6 +82,8 @@ export class TabStrip<K extends string> {
         }
         this.current = opts.initial;
         this.mark();
+        const Observer = list.ownerDocument?.defaultView?.ResizeObserver;
+        if (Observer) new Observer(() => this.scrollToChosen()).observe(list);
     }
 
     /** The pane of the tab `id`: what it holds is built there by the strip's user. */
@@ -157,5 +166,16 @@ export class TabStrip<K extends string> {
             if (on) pane.removeAttribute('inert');
             else pane.setAttribute('inert', '');
         }
+        this.scrollToChosen();
+    }
+
+    /** Scroll the row, if its tabs go past its edges, until the button of the tab chosen is all in sight. */
+    private scrollToChosen(): void {
+        const button = this.tabs.get(this.current)?.button;
+        if (!button) return;
+        const row = this.list.getBoundingClientRect();
+        const tab = button.getBoundingClientRect();
+        if (tab.left < row.left) this.list.scrollLeft -= row.left - tab.left;
+        else if (tab.right > row.right) this.list.scrollLeft += tab.right - row.right;
     }
 }
