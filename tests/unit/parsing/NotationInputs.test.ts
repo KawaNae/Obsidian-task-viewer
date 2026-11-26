@@ -7,7 +7,11 @@ import { StatusCharInput } from '../../../src/services/parsing/utils/StatusCharI
 import { HeadingInput } from '../../../src/services/parsing/utils/HeadingInput';
 import { PropertyLines } from '../../../src/services/parsing/utils/PropertyLines';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
-import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
+import { DEFAULT_SCOPE_KEYS, DEFAULT_SETTINGS } from '../../../src/types';
+import { draftOver } from '../../../src/services/persistence/FileLines';
+import { ChildPropertyLineEditor } from '../../../src/services/persistence/utils/ChildPropertyLineEditor';
+import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 
 describe('a task name typed in a field', () => {
     it.each([
@@ -67,6 +71,32 @@ describe('a property key typed to add', () => {
             const read = keys.read(text);
             expect(read.ok ? read.value : null, JSON.stringify(text)).toBe(line?.key ?? null);
         }
+    });
+
+    it('takes only a key that, written as a property line by the writer, the parser reads back as that key, the value with it', () => {
+        // A seeded draw of ASCII, spaces, and full-width look-alikes of the marks, beside keys typed by hand.
+        let seed = 12345;
+        const next = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+        const pool = [...Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)), '\t', '　', ' ', 'あ', '漢', 'ｘ', '－', '＃', '＞', '：'];
+        const drawn = Array.from({ length: 500 }, () => Array.from({ length: 1 + Math.floor(next() * 6) }, () => pool[Math.floor(next() * pool.length)]).join(''));
+        const byHand = ['~~~', '~~~x', '~~~~', '~~ x', '~x', 'x~~~', '```', '``x', '---', '***', '===', '%%x', '<!-- x', '<pre>', '1234567890. x', '- [ ] x', '[ ] x', '\\x', '^x', 'a #b'];
+        for (const text of [...byHand, ...drawn]) {
+            const read = keys.read(text);
+            if (!read.ok) continue;
+            const lines = ['- [ ] Row'];
+            const { draft } = draftOver(lines);
+            const refused = ChildPropertyLineEditor.applyOps(draft, 0, { ops: [{ key: read.value, op: 'set', value: { text: 'v' } }], keys: DEFAULT_SCOPE_KEYS }, '\t');
+            expect(refused, JSON.stringify(text)).toBeNull();
+            const [task, ...others] = FileParsePipeline.parse('n.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('n.md')).tasks;
+            expect(others, JSON.stringify(text)).toEqual([]);
+            expect(Object.values(task.properties ?? {}).map(p => [p.key, 'spelling' in p.value ? p.value.spelling : p.value.type]), `${JSON.stringify(text)} as ${JSON.stringify(lines)}`)
+                .toEqual([[read.value, 'v']]);
+        }
+    });
+
+    it('refuses a key that opens a fenced code block, which the line after a bullet spells as code', () => {
+        for (const key of ['~~~', '~~~x', '~~~~', '~~~ x']) expect(keys.read(key), key).toEqual({ ok: false, issue: { code: 'listMark' } });
+        for (const key of ['~~x', '~x', 'x~~~']) expect(keys.read(key), key).toEqual({ ok: true, value: key });
     });
 
     it('refuses a key that starts as a list item\'s marker or a # does, which the line after a bullet spells as a nested list, a heading or a tag', () => {

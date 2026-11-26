@@ -13,6 +13,9 @@
  * - `focus()` sends `blur` to the element that had the focus, with the
  *   element focused now as its `relatedTarget`. It leaves the text's
  *   selection where it was, at the start of a field never focused.
+ * - A press (`press`) is a `mousedown`, whose default, unless prevented,
+ *   focuses the element, then a `click`, as Chromium's pointer press is;
+ *   `blur()` takes the focus to the body.
  * - A field's text is selected (`select`, `setSelectionRange`), and the
  *   field scrolled in itself (`scrollLeft`, `scrollTop`), as an input's.
  * - An event is heard by the listeners put on in the capture phase of the
@@ -184,6 +187,25 @@ export class FocusEl {
         if (had === this) return;
         doc.activeElement = this;
         if (had !== doc.body) had.dispatchEvent(focusEvent('blur', this));
+    }
+
+    /** The focus taken out of the element, to the body, as `blur()` does; nothing when it does not hold it. */
+    blur(): void {
+        const doc = this.ownerDocument;
+        if (doc.activeElement !== this) return;
+        doc.activeElement = doc.body;
+        this.dispatchEvent(focusEvent('blur', null));
+    }
+
+    /**
+     * Pressed as a pointer presses a button: a `mousedown`, whose default,
+     * unless a listener prevents it, focuses the element, then a `click`.
+     */
+    press(): void {
+        const down = new Event('mousedown', { bubbles: true, cancelable: true });
+        this.dispatchEvent(down);
+        if (!down.defaultPrevented) this.focus();
+        this.dispatchEvent(new Event('click', { bubbles: true }));
     }
 
     addEventListener(type: string, fn: Listener, opts?: ListenerOptions): void {

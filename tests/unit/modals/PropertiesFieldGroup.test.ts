@@ -201,12 +201,13 @@ describe('the add row takes only a key no row stands for', () => {
         expect(s.keySays()).toEqual(['tags2 already has a field. Edit it there.']);
     });
 
-    it('refuses a key starting as a list item or a # does, and a reserved key naming the field that edits it', () => {
+    it('refuses a key starting as a list item, a # or a code fence does, and a reserved key naming the field that edits it', () => {
         const s = setUp();
         for (const [typed, says] of [
-            ['- x', 'A key cannot start with a list or quote marker, or #.'],
-            ['1. x', 'A key cannot start with a list or quote marker, or #.'],
-            ['#x', 'A key cannot start with a list or quote marker, or #.'],
+            ['- x', 'A key cannot start with a list or quote marker, #, or a code fence (~~~).'],
+            ['1. x', 'A key cannot start with a list or quote marker, #, or a code fence (~~~).'],
+            ['#x', 'A key cannot start with a list or quote marker, #, or a code fence (~~~).'],
+            ['~~~x', 'A key cannot start with a list or quote marker, #, or a code fence (~~~).'],
             ['TV-COLOR', 'Enter TV-COLOR in the Color field.'],
             ['tags', 'Enter tags in the Tags field.'],
             ['position', 'This key is reserved.'],
@@ -311,6 +312,25 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
         expect(s.valueOf('Area').placeholder).toBe('No value');
         // An empty field has no ×.
         expect(shown(xOf(s, 'Area'))).toBe(false);
+    });
+
+    it('writes no value once as the × is pressed over a value typed: what was typed is not written, and the focus leaves the field', () => {
+        const s = setUp(byKey({ Area: text('lab') }));
+        const field = s.valueOf('Area');
+        field.focus();
+        field.type('typed');
+        xOf(s, 'Area')!.press();
+        expect(s.writes.map(valuesOf)).toEqual([{ Area: NONE }]);
+        expect(s.doc.activeElement).not.toBe(field);
+        expect([field.value, field.placeholder]).toEqual(['', 'No value']);
+    });
+
+    it('opens no field of a row a finding locks, an inherited text shown in it: the field takes no input, with no ×', () => {
+        const findings: HubFinding[] = [{ kind: 'duplicate-key', field: 'prop:dup', tone: 'error', text: 'twice', key: 'dup', line: 1 }];
+        const s = setUp({}, { inherited: byKey({ dup: text('s') }), findings });
+        expect([s.valueOf('dup').value, s.valueOf('dup').disabled]).toEqual(['s', true]);
+        expect(xOf(s, 'dup')).toBeNull();
+        expect(s.rowOf('dup')!.find('task-hub__prop-more')).toBeNull();
     });
 
     it('draws a row written from outside as it is now while the focus is in another, which keeps what is typed; a row added is built once the focus leaves', async () => {

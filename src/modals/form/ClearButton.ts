@@ -10,8 +10,12 @@ export interface ClearButtonOptions {
      * Whether the field keeps the focus, or takes it, once it is emptied, so
      * that what is typed next goes in it: the press does not take the focus
      * from the field, and the field is focused after the clear. Without it
-     * the press is a button's as any other (a date's or a time's ×, whose
-     * picker beside it gives the value as often as typing does).
+     * the field does not keep the focus (a date's or a time's ×, whose
+     * picker beside it gives the value as often as typing does): a press on
+     * a field in focus leaves it the focus until `clear` has committed the
+     * field emptied, so that its blur does not first commit what was typed,
+     * and then takes the focus out of it; a press on a field out of focus
+     * is a button's as any other.
      */
     focusesField: boolean;
     /** What the button is called (`aria-label`): "Clear" when none is given. */
@@ -40,12 +44,18 @@ export class ClearButton {
         // WebKit は inline-flex 要素直下の SVG を描画しないことがあるため span 経由で挿す
         setIcon(this.button.createSpan(), 'x');
         // mousedown の既定の動きがフォーカスをボタンへ移す。止めると欄に残り、
-        // 候補の一覧も、iPad のキーボードも欄のまま続く
-        if (opts.focusesField) this.button.addEventListener('mousedown', (e) => e.preventDefault());
+        // 候補の一覧も、iPad のキーボードも欄のまま続く。欄にフォーカスがある
+        // ときは、欄へ置かない × でも止める。移ると欄の blur が打った字を先に
+        // 確定し、× の確定と合わせて 2 回書くためである
+        this.button.addEventListener('mousedown', (e) => {
+            if (opts.focusesField || input.ownerDocument.activeElement === input) e.preventDefault();
+        });
         this.button.addEventListener('click', () => {
             opts.clear();
             this.sync();
             if (opts.focusesField) placeFocus({ to: input });
+            // 空にして確定した後に、押した動きが移すはずだったフォーカスを欄から外す。キーボードを閉じる
+            else if (input.ownerDocument.activeElement === input) input.blur();
         });
         input.addEventListener('input', () => this.sync());
         this.sync();

@@ -102,6 +102,10 @@ export class FakeEl {
         focusedEl = this;
         this.dispatchEvent(new Event('focus'));
     }
+    /** The document, as far as its active element: the element focused last (`focused`). */
+    get ownerDocument(): { readonly activeElement: FakeEl | null } {
+        return { get activeElement() { return focusedEl; } };
+    }
     blur(): void {
         if (focusedEl === this) focusedEl = null;
         this.dispatchEvent(new Event('blur'));

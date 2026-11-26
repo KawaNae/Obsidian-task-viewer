@@ -82,6 +82,20 @@ describe('ClearButton', () => {
         expect(focused()).toBe(elsewhere);
     });
 
+    it('keeps the focus in a field in focus till it is emptied, then takes it out, when the field is not to keep it: no blur commits what was typed first', () => {
+        const b = buttonOf('Plan', false);
+        const seen: string[] = [];
+        b.input.addEventListener('blur', () => seen.push(`blur ${JSON.stringify(b.input.value)} after ${b.cleared()} clears`));
+        b.input.focus();
+        b.input.type('typed');
+        const press = b.button.press();
+
+        expect(press.defaultPrevented).toBe(true);
+        expect(b.cleared()).toBe(1);
+        expect(seen).toEqual(['blur "" after 1 clears']);
+        expect(focused()).not.toBe(b.input);
+    });
+
     it('is disabled with the field once synced, and a press then does nothing', () => {
         const b = buttonOf('Plan', true);
         b.input.disabled = true;

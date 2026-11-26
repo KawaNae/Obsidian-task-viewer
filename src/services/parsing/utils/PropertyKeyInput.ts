@@ -4,6 +4,7 @@ import { readFail, readOk } from '../../../utils/values/Read';
 import { builtinsByKey } from './BuiltinValues';
 import { KEYS_NOT_SCOPE, reservedPropertyKeys } from './FrontmatterPolicy';
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
+import { Outline } from './Outline';
 import { PropertyKey } from './PropertyKey';
 
 /**
@@ -19,11 +20,23 @@ import { PropertyKey } from './PropertyKey';
 const LIST_MARK = new RegExp(`^(?:${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}|[#>])`);
 
 /**
+ * Whether the property line of `key` opens a fenced code block in its item
+ * (a key of three tildes or more, `~~~x`), as the note's one reading of its
+ * blocks reads it (`Outline`): the plugin reads no property line there, so
+ * the key would be written and read as none. A fence of backquotes holds a
+ * backquote, which `readKey` refuses already.
+ */
+function opensFence(key: string): boolean {
+    return Outline.read([`- ${key}:: v`]).kindOf(0) === 'item-fence';
+}
+
+/**
  * A property's key typed in a field (the hub's new property): the space
  * around it taken off, and refused when
  * - the property line would not read it as the key
  *   (`PROPERTY_KEY_SOURCE`: empty, `:`, `[`, `]`, a backquote)
- * - it starts as a list item's marker, a `#` or a quote's `>` does ({@link LIST_MARK})
+ * - it starts as a list item's marker, a `#` or a quote's `>` does
+ *   ({@link LIST_MARK}), or opens a code fence ({@link opensFence})
  * - the plugin keeps it for itself (`reservedPropertyKeys`: the scope keys,
  *   `tags`), said with the built-in's field when one edits it
  *   (`builtinsByKey`; the scope keys as the settings name them)
@@ -41,7 +54,7 @@ export const PropertyKeyInput = {
             read(text: string): Read<string> {
                 const key = readKey(text);
                 if (!key.ok) return key;
-                if (LIST_MARK.test(key.value)) return readFail({ code: 'listMark' });
+                if (LIST_MARK.test(key.value) || opensFence(key.value)) return readFail({ code: 'listMark' });
                 const folded = PropertyKey.fold(key.value);
                 if (reserved.has(folded)) {
                     const builtin = builtins.get(folded);
