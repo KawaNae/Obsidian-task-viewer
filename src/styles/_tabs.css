@@ -7,10 +7,14 @@
    place's own stylesheet may lay the panes otherwise.
    ====================================================== */
 
+/* The row's line is drawn inside its box, its last pixel, for the line
+   under the tab chosen to cover it and for a row that scrolls (a place's
+   may) to clip nothing of it: a border would sit outside the box the row
+   clips its tabs to. */
 .tv-tabs {
     display: flex;
     width: 100%;
-    border-bottom: 1px solid var(--tv-border);
+    box-shadow: inset 0 -1px 0 var(--tv-border);
 }
 
 /* Obsidian's button look taken off, as tv-icon-btn takes it (see
@@ -24,7 +28,6 @@
     gap: 6px;
     height: var(--input-height);
     padding: 0 12px;
-    margin-bottom: -1px;
     appearance: none;
     -webkit-appearance: none;
     border: none;

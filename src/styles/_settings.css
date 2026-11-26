@@ -7,71 +7,36 @@
     padding: 4px 0 8px;
 }
 
-.tv-settings .tv-settings__wrapper {
-    display: flex;
-    flex-direction: column;
-}
-
-/* ─── Tab Navigation ──────────────────────────────────────── */
-
-.tv-settings .tv-settings__nav {
-    display: flex;
-    flex-wrap: nowrap;
+/* ─── Tabs (TabStrip, _tabs.css) ─────────────────────────── */
+/* Nine tabs do not fit a phone's width: each keeps its name's width (and
+ * shares what room is left), and the row scrolls sideways, its scrollbar
+ * hidden. The tab's (0,3,1) wins _tabs.css's sharing of the width, (0,2,1). */
+.tv-settings > .tv-tabs {
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
-    padding: 0;
 }
 
-.tv-settings .tv-settings__nav::-webkit-scrollbar {
+.tv-settings > .tv-tabs::-webkit-scrollbar {
     display: none;
 }
 
-.tv-settings .tv-settings__nav-btn {
-    flex-shrink: 0;
-    white-space: nowrap;
-    padding: 12px 12px;
-    border: 1px solid transparent;
-    border-bottom: none;
-    background-color: transparent;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-    border-radius: var(--tv-radius-s) var(--tv-radius-s) 0 0;
-    font-size: var(--font-ui-small);
-    margin-bottom: -1px;
-    box-shadow: none;
-    transition: color 0.15s ease;
-    user-select: none;
+.tv-settings > .tv-tabs > button.tv-tabs__tab {
+    flex: 1 0 auto;
 }
 
-.tv-settings .tv-settings__nav-btn:hover {
-    color: var(--tv-text);
-    box-shadow: none;
-}
-
-.tv-settings .tv-settings__nav-btn--active {
-    border-color: var(--tv-border);
-    background-color: var(--tv-bg-settings-active);
-    color: var(--tv-text);
-}
-
-/* ─── Content Area ────────────────────────────────────────── */
-
-.tv-settings .tv-settings__content {
-    flex: 1;
-    overflow-y: auto;
-    border-top: 1px solid var(--tv-border);
-    padding: 16px 0 0;
+.tv-settings > .tv-tabs__panes {
+    padding-top: 16px;
 }
 
 /* Sub-section headers within tabs */
-.tv-settings .tv-settings__panel .setting-section-header {
+.tv-settings .tv-tabs__pane .setting-section-header {
     margin-top: 20px;
     margin-bottom: 4px;
     font-size: var(--font-ui-medium);
 }
 
-.tv-settings .tv-settings__panel .setting-section-header:first-child {
+.tv-settings .tv-tabs__pane .setting-section-header:first-child {
     margin-top: 4px;
 }
 
@@ -110,7 +75,7 @@
     /* Force control onto its own row so inputs/dropdowns get a full
      * row to stretch into. (Status definitions opt out and keep their
      * own wrap layout.) */
-    .tv-settings__panel > .setting-item .setting-item-control,
+    .tv-settings .tv-tabs__pane > .setting-item .setting-item-control,
     .tv-settings__mapping .setting-item .setting-item-control {
         flex: 1 1 100%;
         justify-content: flex-start;
@@ -140,20 +105,6 @@
     .tv-settings .setting-item-control select {
         width: 100%;
     }
-}
-
-/* ─── Mobile active tab fill ──────────────────────────────── */
-/* Obsidian mobile reverses the desktop modal bg: in light themes the
- * modal uses --background-secondary, in dark themes --background-primary.
- * Either case collapses the desktop active-tab fill into the modal bg,
- * so reverse the relationship — pick whichever bg variable the modal
- * isn't using. Achromatic, theme-driven, no media query (mobile only). */
-body.is-mobile.theme-light .tv-settings {
-    --tv-bg-settings-active: var(--background-primary);
-}
-
-body.is-mobile.theme-dark .tv-settings {
-    --tv-bg-settings-active: var(--background-secondary);
 }
 
 /* About tab */

@@ -11,10 +11,13 @@ import * as ParsersTab from './ParsersTab';
 import * as LogTab from './LogTab';
 import * as AboutTab from './AboutTab';
 import { SettingFields } from './SettingFields';
+import { TabStrip, type TabSpec } from '../views/sharedUI/TabStrip';
+
+type SettingsTabId = 'basic' | 'general' | 'views' | 'viewDetails' | 'notes' | 'frontmatter' | 'parsers' | 'log' | 'about';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: PluginContext;
-    private activeTabId = 'basic';
+    private activeTabId: SettingsTabId = 'basic';
     /** The text fields of the tab as drawn now: what is typed in them is committed as it is hidden or drawn again. */
     private fields: SettingFields | null = null;
 
@@ -45,45 +48,25 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             cls: 'setting-item-description'
         });
 
-        // Tab UI
-        const wrapper = containerEl.createDiv('tv-settings__wrapper');
-        const nav = wrapper.createDiv('tv-settings__nav');
-        const content = wrapper.createDiv('tv-settings__content');
-
-        const tabs = [
-            { id: 'basic',        label: t('settings.tabs.basic'),        render: (el: HTMLElement) => BasicTab.render(el, this.plugin, fields) },
-            { id: 'general',      label: t('settings.tabs.general'),      render: (el: HTMLElement) => GeneralTab.render(el, this.plugin) },
-            { id: 'views',        label: t('settings.tabs.views'),        render: (el: HTMLElement) => ViewsTab.render(el, this.plugin, fields) },
-            { id: 'viewDetails',  label: t('settings.tabs.viewDetails'),  render: (el: HTMLElement) => ViewDetailsTab.render(el, this.plugin, fields) },
-            { id: 'notes',        label: t('settings.tabs.notes'),        render: (el: HTMLElement) => NotesTab.render(el, this.plugin, fields) },
-            { id: 'frontmatter',  label: t('settings.tabs.frontmatter'),  render: (el: HTMLElement) => FrontmatterTab.render(el, this.plugin, fields) },
-            { id: 'parsers',      label: t('settings.tabs.parsers'),      render: (el: HTMLElement) => ParsersTab.render(el, this.plugin, () => this.display()) },
-            { id: 'log',          label: t('settings.tabs.log'),          render: (el: HTMLElement) => LogTab.render(el, this.plugin, fields) },
-            { id: 'about',        label: t('settings.tabs.about'),        render: (el: HTMLElement) => AboutTab.render(el, this.plugin) },
+        // The tabs: the strip builds the row and a pane for each, and keeps one
+        // chosen; what each pane holds is drawn here. The tab last chosen is
+        // kept for the next drawing (opened again, or drawn anew by a tab).
+        const tabs: (TabSpec<SettingsTabId> & { render: (el: HTMLElement) => void })[] = [
+            { id: 'basic',        label: t('settings.tabs.basic'),        render: (el) => BasicTab.render(el, this.plugin, fields) },
+            { id: 'general',      label: t('settings.tabs.general'),      render: (el) => GeneralTab.render(el, this.plugin) },
+            { id: 'views',        label: t('settings.tabs.views'),        render: (el) => ViewsTab.render(el, this.plugin, fields) },
+            { id: 'viewDetails',  label: t('settings.tabs.viewDetails'),  render: (el) => ViewDetailsTab.render(el, this.plugin, fields) },
+            { id: 'notes',        label: t('settings.tabs.notes'),        render: (el) => NotesTab.render(el, this.plugin, fields) },
+            { id: 'frontmatter',  label: t('settings.tabs.frontmatter'),  render: (el) => FrontmatterTab.render(el, this.plugin, fields) },
+            { id: 'parsers',      label: t('settings.tabs.parsers'),      render: (el) => ParsersTab.render(el, this.plugin, () => this.display()) },
+            { id: 'log',          label: t('settings.tabs.log'),          render: (el) => LogTab.render(el, this.plugin, fields) },
+            { id: 'about',        label: t('settings.tabs.about'),        render: (el) => AboutTab.render(el, this.plugin) },
         ];
-
-        tabs.forEach(tab => {
-            const btn = nav.createEl('div', {
-                cls: 'tv-settings__nav-btn',
-                text: tab.label,
-                attr: { role: 'tab', tabindex: '0' },
-            });
-            btn.dataset.tabId = tab.id;
-
-            const panel = content.createDiv('tv-settings__panel');
-            panel.dataset.tabId = tab.id;
-            tab.render(panel);
+        const strip = new TabStrip<SettingsTabId>(containerEl, tabs, {
+            initial: this.activeTabId,
+            onSelect: (id) => { this.activeTabId = id; },
         });
-
-        const initialTab = tabs.some(tab => tab.id === this.activeTabId) ? this.activeTabId : tabs[0].id;
-        this.activateTab(wrapper, initialTab);
-
-        nav.addEventListener('click', (e) => {
-            const btn = (e.target as HTMLElement).closest('.tv-settings__nav-btn') as HTMLElement | null;
-            if (btn?.dataset.tabId) {
-                this.activateTab(wrapper, btn.dataset.tabId);
-            }
-        });
+        for (const tab of tabs) tab.render(strip.pane(tab.id));
     }
 
     /** The tab is closed: what is typed in a field is committed, as a blur would, without waiting for one. */
@@ -91,15 +74,5 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         this.fields?.commitAll();
         this.fields = null;
         super.hide();
-    }
-
-    private activateTab(wrapper: HTMLElement, tabId: string): void {
-        this.activeTabId = tabId;
-        wrapper.querySelectorAll('.tv-settings__nav-btn').forEach(btn =>
-            btn.toggleClass('tv-settings__nav-btn--active', (btn as HTMLElement).dataset.tabId === tabId)
-        );
-        wrapper.querySelectorAll('.tv-settings__panel').forEach(panel =>
-            (panel as HTMLElement).style.display = (panel as HTMLElement).dataset.tabId === tabId ? '' : 'none'
-        );
     }
 }
