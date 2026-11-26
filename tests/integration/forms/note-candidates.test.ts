@@ -183,10 +183,10 @@ describe('the settings\' note template', () => {
             try {
                 app.setting.open();
                 app.setting.openTabById('obsidian-task-viewer');
-                await until(() => settingsTab()?.isConnected && settingsTab().querySelector('.tv-settings__nav-btn'));
-                settingsTab().querySelector('.tv-settings__nav-btn[data-tab-id="notes"]').click();
+                await until(() => settingsTab()?.isConnected && settingsTab().querySelector('[role="tab"]'));
+                settingsTab().querySelector('[role="tab"][data-tab="notes"]').click();
                 await sleep(100);
-                const panel = [...settingsTab().querySelectorAll('.tv-settings__panel')].find(p => p.style.display !== 'none');
+                const panel = settingsTab().querySelector('[role="tabpanel"]:not([inert])');
                 const setting = [...panel.querySelectorAll('.setting-item')].find(el => el.querySelector('.setting-item-name')?.textContent === ${JSON.stringify(name)});
                 const input = setting.querySelector('.setting-item-control input');
                 input.focus();
