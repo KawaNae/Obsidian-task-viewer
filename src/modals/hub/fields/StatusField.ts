@@ -43,7 +43,7 @@ export class StatusField {
 
     private commit(char: string): void {
         if (this.ctx.isShut()) return;
-        void this.ctx.put(TaskUpdateBuilder.status(this.ctx.task(), char));
+        void this.ctx.put(TaskUpdateBuilder.status(this.ctx.task(), char), 'form');
         // The value holds the status picked once it is put: the button shows it with no echo waited for.
         this.render();
     }

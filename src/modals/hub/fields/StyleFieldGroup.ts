@@ -9,7 +9,7 @@ import { TextInput } from '../../../utils/values/TextValues';
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
-import { bindField, type BoundField } from '../../form/bindField';
+import { bindField, type BoundField, type Written } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { PickerTextField } from '../../form/PickerTextField';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
@@ -151,15 +151,15 @@ export class StyleFieldGroup implements ClosingPart {
         this.updateDecoration(field);
     }
 
-    private commit(field: StyleField, value: string | undefined): Promise<boolean> | void {
+    private commit(field: StyleField, value: string | undefined): Promise<Written> | void {
         if (this.ctx.isShut() || this.ctx.locked(field)) return;
-        return this.ctx.put(TaskUpdateBuilder.styleField(this.ctx.task(), field, value ?? ''));
+        return this.ctx.put(TaskUpdateBuilder.styleField(this.ctx.task(), field, value ?? ''), field);
     }
 
     /** Write the row's own no value of `field`, which hides the value it inherits. */
     private hide(field: StyleField): void {
         if (this.ctx.isShut() || this.ctx.locked(field)) return;
-        void this.ctx.put(TaskUpdateBuilder.styleHidden(this.ctx.task(), field));
+        void this.ctx.put(TaskUpdateBuilder.styleHidden(this.ctx.task(), field), field);
         this.refresh();
     }
 

@@ -212,7 +212,7 @@ describe('opening the source in a move', () => {
         const h = await open();
         await h.begin();
         await h.source.enter();
-        expect(await h.host.put({ content: 'Field' })).toBe(false);
+        expect(await h.host.put({ content: 'Field' })).toBe('dropped');
         expect(h.host.task().content).toBe('Row');
     });
 });
@@ -428,12 +428,12 @@ describe('a field\'s change refused over a property in a move', () => {
     it('tells the property\'s line by where it stands under the row, to mend in the source, or, where it does not open, in the editor once cancelled', async () => {
         const h = await open(['# Tasks', '- [ ] Row', '\t- tv-color:: red', '\t- tv-color:: green', '# Done', '']);
         await h.begin();
-        expect(await h.host.put({ color: 'blue' })).toBe(false);
+        expect(await h.host.put({ color: 'blue' })).toBe('dropped');
         expect(h.put.at(-1)).toBe(t('modal.hub.move.refusedProperty', { key: 'tv-color', line: '1' }));
 
         const g = await open(['# Tasks', '- [ ] Row', '  going on', '\t- tv-color:: red', '\t- tv-color:: green', '# Done', '']);
         await g.begin();
-        expect(await g.host.put({ color: 'blue' })).toBe(false);
+        expect(await g.host.put({ color: 'blue' })).toBe('dropped');
         expect(g.put.at(-1)).toBe(t('modal.hub.move.refusedPropertyShut', { key: 'tv-color', line: '2' }));
     });
 });

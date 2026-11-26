@@ -3,6 +3,7 @@ import type { TaskLookup } from '../../services/display/DisplayTaskConverter';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
 import type { FieldFocus } from '../../utils/FieldFocus';
 import type { FormIssue } from '../form/FormIssue';
+import type { Written } from '../form/bindField';
 import type { LineTarget } from './SourceLine';
 
 /**
@@ -16,9 +17,12 @@ export interface HubForm {
     /** Enable the fields or not, and say why not above the form's tabs, as `HubHost.shut` answers now. */
     showShut(): void;
     /**
-     * Say why a change the fields handed on was not taken (`HubHost.put`):
-     * above the form's tabs, in sight from either. Null takes back what was
-     * said.
+     * Say why a change the fields handed on was not taken (`HubHost.put`).
+     * Said while the field hands it on (a draft refuses it at once), it is
+     * said under that field, beside what else was said since it was last
+     * taken back. Said after (a write's answer), it is said above the form's
+     * tabs, in sight from either, in place of what was said. Null takes back
+     * all that was said.
      */
     sayPut(refusal: string | null): void;
     /**
@@ -158,10 +162,14 @@ export interface HubHost {
     /** The value the fields show, with what was handed on put over it. */
     task(): Task;
     /**
-     * Hand a change of the fields on: whether it was taken. A refusal is said
-     * by the host (`HubForm.sayPut`); a field refused keeps what was typed.
+     * Hand a change of the fields on: whether it was taken, and, refused,
+     * whether the field may keep what was typed (`Written`). A write refused
+     * by the note may be taken once committed again: the field keeps it
+     * (false). A draft refuses a change for what its lines hold, which the
+     * same change does not get past: the field shows the value again
+     * (`'dropped'`). A refusal is said by the host (`HubForm.sayPut`).
      */
-    put(updates: Partial<Task> | null): Promise<boolean>;
+    put(updates: Partial<Task> | null): Promise<Written>;
     /** How far the form takes no edit now, and why; null while it takes them all. */
     shut(): HubShut | null;
     /**

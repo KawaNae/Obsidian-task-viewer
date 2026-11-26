@@ -419,44 +419,33 @@ describe('a value the move\'s draft refused', () => {
     /** The row's property written twice: the draft refuses a change of it. */
     const TWICE = ['# 予定', '- [ ] 動かす行', '    - area:: a', '    - area:: b', '# 済み', ''].join('\n');
 
-    it('is said refused once the source took a text in, asked of by [Cancel], and thrown away the fields show the row, a blur writing nothing', async () => {
+    it('empties the add row and is said under it, not above the tabs; [Cancel] asks nothing of it alone and throws the move away, a blur writing nothing', async () => {
         await writeIndexedTestFile(TEST_FILE, TWICE);
         const seen = run<Record<string, unknown>>(`
             await beginMove('動かす行');
             const addRow = () => [...hub().querySelectorAll('.task-hub__prop-add input')];
-            const says = () => [...hub().querySelectorAll('.task-hub__form > .tv-form__says--form .tv-form__error')].map(el => el.textContent);
+            const errors = (el) => [...(el?.querySelectorAll('.tv-form__error') ?? [])].map(one => one.textContent);
+            const formSays = () => errors(hub().querySelector('.task-hub__form > .tv-form__says--form'));
+            const addSays = () => errors(hub().querySelector('.task-hub__prop-add')?.nextElementSibling);
             hub().querySelector('button.tv-tabs__tab[data-tab="detail"]').click();
             await sleep(100);
             type(addRow()[0], 'area');
             type(addRow()[1], 'zz');
             addRow()[1].blur();
             await sleep(200);
-            const refused = says().length;
-            await openSource();
-            edit('children', viewOf('children').state.doc.length, undefined, '\\n- [ ] 子c');
-            pressButton(pencil());
-            await until(() => !viewOf('children'));
-            await sleep(200);
-            hub().querySelector('button.tv-tabs__tab[data-tab="detail"]').click();
-            await sleep(100);
-            const back = { typed: addRow().map(input => input.value), said: says().length };
+            const refused = { typed: addRow().map(input => input.value), under: addSays().length, above: formSays().length };
             pressButton(formRow(hub()).querySelector('.tv-form__cancel'));
-            await sleep(100);
-            const asked = ask();
-            pressButton(buttonNamed(${JSON.stringify(tr('modal.draft.discard'))}));
             await until(() => !act());
             await sleep(200);
-            const thrown = { typed: addRow().map(input => input.value), said: says().length };
+            const thrown = { asked: ask(), typed: addRow().map(input => input.value), under: addSays().length, above: formSays().length };
             addRow()[0].focus();
             addRow()[0].blur();
             await sleep(500);
-            return JSON.stringify({ refused, back, asked, thrown, disk: await disk() });
+            return JSON.stringify({ refused, thrown, disk: await disk() });
         `);
         expect(seen).toEqual({
-            refused: 1,
-            back: { typed: ['area', 'zz'], said: 1 },
-            asked: tr('modal.hub.move.discardAsk'),
-            thrown: { typed: ['', ''], said: 0 },
+            refused: { typed: ['', ''], under: 1, above: 0 },
+            thrown: { asked: null, typed: ['', ''], under: 0, above: 0 },
             disk: TWICE,
         });
     });

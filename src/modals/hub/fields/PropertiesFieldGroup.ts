@@ -12,7 +12,7 @@ import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
 import { onFormEnter } from '../../form/formEnter';
-import { bindField, type BoundField } from '../../form/bindField';
+import { bindField, type BoundField, type Written } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { ValueSuggest, type ValueSuggestOptions } from '../../../suggest/ValueSuggest';
 import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './FieldGroupContext';
@@ -33,7 +33,10 @@ import { PropertyListField, type ListFocus } from './PropertyListField';
  * 追加行のキーは `PropertyKeyInput` で読み（空のキー、`:`、`[`、`]`、`` ` `` と予約されたキーを
  * 拒む）、読めないキーは欄の下に理由を出して足さない。理由は打ち直すと
  * 消え、ほかの欄の確定では消えない。行の増減で組み直しても、追加行の
- * 打ちかけの字は残す。足す書き込みが拒まれたら、打った字を追加行に戻す。
+ * 打ちかけの字は残す。足す書き込みが拒まれ、ホストが打った字を欄に残して
+ * よいと答えたら（`HubHost.put`）、打った字を追加行に戻す。残さないと
+ * 答えたら、追加行は空のままにする。Enter で足したときは、組み直した追加行の
+ * 同じ欄にフォーカスを戻す。
  *
  * 行は組み立てごとに1つの `AbortSignal`（`built`）を持ち、その組み立てで
  * 付けた listener、候補の一覧、リストの欄はすべてそれに掛ける。組み直す前に
@@ -189,12 +192,18 @@ export class PropertiesFieldGroup implements ClosingPart {
             if (!key?.ok) return;
             const raw = valueInput.value;
             const typed = { key: keyInput.value, value: raw };
-            const write = this.set(key.value, raw);
+            // An Enter leaves the focus in the add row; a blur has taken it elsewhere already.
+            const active = keyInput.ownerDocument.activeElement;
+            const held = active === keyInput ? 'key' : active === valueInput ? 'value' : null;
+            const write = this.set(key.value, raw, 'propKey');
             this.draft = { key: '', value: '' };
             this.render(true);
-            // Refused: what was typed is the add row's again, unless something was typed since.
+            if (held) this.addRow?.[held === 'key' ? 'keyInput' : 'valueInput'].focus();
+            // Refused where it may be taken once added again: what was typed is
+            // the add row's again, unless something was typed since. Dropped,
+            // the row stays empty.
             void write?.then((written) => {
-                if (written || this.draft.key !== '' || this.draft.value !== '') return;
+                if (written !== false || this.draft.key !== '' || this.draft.value !== '') return;
                 this.draft = typed;
                 const row = this.addRow;
                 if (row && row.keyInput.value === '' && row.valueInput.value === '') {
@@ -405,27 +414,28 @@ export class PropertiesFieldGroup implements ClosingPart {
      * aside: a line the task has keeps its key as written, and a new line
      * takes `key`.
      */
-    private set(key: string, raw: string): Promise<boolean> | undefined {
-        return this.setValue(key, PropertyValues.fromText(raw));
+    private set(key: string, raw: string, at: HubField = propField(key)): Promise<Written> | undefined {
+        return this.setValue(key, PropertyValues.fromText(raw), at);
     }
 
     /** Write `value` as the task's own value of the property `key`, its key kept as {@link set} keeps it. */
-    private setValue(key: string, value: PropertyValue): Promise<boolean> | undefined {
+    private setValue(key: string, value: PropertyValue, at: HubField = propField(key)): Promise<Written> | undefined {
         const own = this.ctx.task().properties ?? {};
         const written = PropertyKey.get(own, key)?.key ?? key;
-        return this.commit({ ...own, [PropertyKey.fold(key)]: { key: written, value } });
+        return this.commit({ ...own, [PropertyKey.fold(key)]: { key: written, value } }, at);
     }
 
     /** Take the task's own line of the property `key` out, its case aside: the value above comes through. */
-    private remove(key: string): Promise<boolean> | undefined {
+    private remove(key: string): Promise<Written> | undefined {
         const next = { ...(this.ctx.task().properties ?? {}) };
         delete next[PropertyKey.fold(key)];
-        return this.commit(next);
+        return this.commit(next, propField(key));
     }
 
-    private commit(props: Properties): Promise<boolean> | undefined {
+    /** Hand the task's own properties on as `props`, from the field `at`: a property's row, or the add row's key. */
+    private commit(props: Properties, at: HubField): Promise<Written> | undefined {
         if (this.ctx.isShut()) return undefined;
-        return this.ctx.put(TaskUpdateBuilder.customProperties(this.ctx.task(), props));
+        return this.ctx.put(TaskUpdateBuilder.customProperties(this.ctx.task(), props), at);
     }
 
     /**
@@ -508,6 +518,11 @@ export class PropertiesFieldGroup implements ClosingPart {
         const field = folded ? this.valueInputs.get(folded) ?? this.lists.get(folded)?.focusTarget('add') : undefined;
         return field ?? this.addKeyInput ?? null;
     }
+}
+
+/** The field of the property `key`'s row, as its issues are said of it. */
+function propField(key: string): HubField {
+    return `prop:${PropertyKey.fold(key)}`;
 }
 
 /**

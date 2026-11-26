@@ -315,10 +315,10 @@ describe('while the row moves', () => {
         expect(h.told).toContain('card');
     });
 
-    it('says a change the draft refuses above the form\'s tabs, as a write refused', async () => {
+    it('says why the draft refuses a change, and answers that the field does not keep it, as the same change would be refused again', async () => {
         const h = await open(['# Tasks', '- [ ] Row', '\t- tv-color:: red', '\t- tv-color:: green', '# Done', '']);
         await h.begin();
-        expect(await h.host.put({ color: 'blue' })).toBe(false);
+        expect(await h.host.put({ color: 'blue' })).toBe('dropped');
         expect(h.put.at(-1)).toContain('tv-color');
     });
 
@@ -396,7 +396,7 @@ describe('the move', () => {
         const send = h.noteOps.send.bind(h.noteOps);
         vi.spyOn(h.noteOps, 'send').mockImplementationOnce(async (...args) => { await wait.shut; return send(...args); });
         h.form.write();
-        expect(await h.host.put({ content: 'During' })).toBe(false);
+        expect(await h.host.put({ content: 'During' })).toBe('dropped');
         expect(h.host.task().content).toBe('Row');
         wait.open();
         await vi.waitFor(() => expect(h.panel.close).toHaveBeenCalled());

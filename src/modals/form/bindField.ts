@@ -1,6 +1,15 @@
 import type { FieldCodec, Issue, Read } from '../../utils/values/Read';
 import { composingIn, onFormEnter } from './formEnter';
 
+/**
+ * What the write a commit waits for came to: taken (`true`); refused with
+ * the text kept as typed, as one not yet committed, where the same text
+ * committed again may be taken (`false`: the note was read again since);
+ * or refused for what the value holds, which the same text does not get
+ * past (`'dropped'`): the field shows its value again.
+ */
+export type Written = boolean | 'dropped';
+
 /** A text field bound to a value (`bindField`). */
 export interface BoundField<T> {
     /**
@@ -38,11 +47,13 @@ export interface BindFieldOptions<T> {
      * Called once a commit reads a value that is not the current one, with
      * that value. False when the form does not take it (a rule across its
      * fields refuses it, said by the form): the text stays as typed, as one
-     * not yet committed. A promise when a write decides it: answered false
-     * (the write refused), the text stays as typed, as one not yet committed,
-     * and a value from outside does not take its place.
+     * not yet committed. A promise when a write decides it ({@link Written}):
+     * answered false, the text stays as typed, as one not yet committed, and
+     * a value from outside does not take its place; answered `'dropped'`,
+     * the field shows its value, unless something was typed or came in
+     * meanwhile.
      */
-    commit(value: T): boolean | void | Promise<boolean>;
+    commit(value: T): boolean | void | Promise<Written>;
     /** What the field's text reads as wrong now, or null when nothing is. */
     issues(issue: Issue | null): void;
     /** Whether a list open on the field takes an Enter (`onFormEnter`). */
@@ -89,7 +100,7 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     /** The text the field was last given (from outside, or by a commit): what it holds when nothing is typed over it. */
     let given = input.value;
     /** The write a commit is waiting for: what it decides, the field holds as typed till then. */
-    let writing: Promise<boolean> | null = null;
+    let writing: Promise<Written> | null = null;
     /** Whether anything was typed since the field was last given its text (`takesSame`). */
     let typedOver = false;
     // The field's composition is followed from now on.
@@ -131,8 +142,15 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
             void taken.then((written) => {
                 if (writing !== taken) return;
                 writing = null;
+                if (given !== text) return;
                 // Refused: the text is typed again, unless something came in meanwhile.
-                if (!written && given === text) given = before;
+                if (written === false) given = before;
+                // Refused for what the value holds: the field shows the value, unless typed over since.
+                else if (written === 'dropped' && input.value === text) {
+                    const shown = shownValue();
+                    if (shown !== text) put(shown);
+                    given = shown;
+                }
             });
         }
     };

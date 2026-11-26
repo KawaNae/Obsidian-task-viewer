@@ -93,6 +93,11 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
     },
     {
         file: 'modals/hub/fields/PropertiesFieldGroup.ts',
+        line: 'if (held) this.addRow?.[held === \'key\' ? \'keyInput\' : \'valueInput\'].focus();',
+        why: 'the rows drawn again on a property added by Enter: the add row\'s field keeps the focus it held',
+    },
+    {
+        file: 'modals/hub/fields/PropertiesFieldGroup.ts',
         line: 'valueInput.focus();',
         why: 'a key picked from the key field\'s list: the typing goes on into the value field beside it',
     },
