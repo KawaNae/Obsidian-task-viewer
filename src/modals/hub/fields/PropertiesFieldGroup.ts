@@ -1,14 +1,13 @@
 import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
-import type { Properties, PropertyScalar, PropertyValue, Task } from '../../../types';
-import { getEffectiveProperties } from '../../../services/data/EffectiveProperties';
+import type { Properties, PropertyScalar, PropertyValue } from '../../../types';
 import { PropertyKey } from '../../../services/parsing/utils/PropertyKey';
 import { PropertyValues } from '../../../services/parsing/utils/PropertyValues';
 import { FilterValueCollector } from '../../../services/filter/FilterValueCollector';
 import { PropertyKeyInput } from '../../../services/parsing/utils/PropertyKeyInput';
 import { FreeText } from '../../../utils/values/TextValues';
 import type { Read } from '../../../utils/values/Read';
-import { CascadeSource } from '../CascadeSource';
+import { CascadeSource, type CascadeSourceKind } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
 import { onFormEnter } from '../../form/formEnter';
@@ -17,9 +16,11 @@ import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { ValueSuggest, type ValueSuggestOptions } from '../../../suggest/ValueSuggest';
 import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './FieldGroupContext';
 import { PropertyListField, type ListFocus } from './PropertyListField';
+import { PropertyRows, type PropertyRow, type PropertyRowField } from './PropertyRows';
 
 /**
- * カスタムプロパティ行。
+ * カスタムプロパティ行。どの行があり、各行が何を出すかは `PropertyRows` が決め、
+ * ここはそれを描く。
  * - own キー: value 編集可 + 行削除ボタン
  * - cascade 由来のみのキー: グレー行。value を編集し確定すると own 上書きに昇格
  * - リストの値: 項目ごとの欄（`PropertyListField`）。自分のリストには行削除ボタンを
@@ -98,36 +99,11 @@ export class PropertiesFieldGroup implements ClosingPart {
             if (task.properties?.[folded] !== undefined) this.drafts.delete(folded);
         }
 
-        // render 時スナップショット。表示判定（isOwn / pv）専用 — commit の
-        // merge base には使わない。focus ガードで rebuild がスキップされる間に
-        // 他行の commit が echo されると陳腐化するため、各 closure は
-        // ctx.task().properties を発火時に読む（tags と同じ規則）。
-        const own = task.properties ?? {};
-        const effective = getEffectiveProperties(task);
-
-        for (const [folded, { key, value: pv }] of Object.entries(effective)) {
-            const ownValue = PropertyKey.get(own, key)?.value;
-            const draft = ownValue === undefined ? this.drafts.get(folded) : undefined;
-            if (ownValue?.type === 'list') this.renderListRow(folded, key, ownValue.items, 'own');
-            else if (draft) this.renderListRow(folded, key, draft, 'draft');
-            else if (ownValue === undefined && pv.type === 'list') this.renderListRow(folded, key, pv.items, 'inherited');
-            else this.renderValueRow(folded, key, pv, ownValue !== undefined);
-        }
-
-        // A property whose block has a finding and that has no value to show
-        // (a key written twice, and nothing inherited): a locked row of its
-        // own, so that what is wrong is said where the property would be.
-        for (const finding of this.ctx.findings()) {
-            if (!finding.field.startsWith('prop:')) continue;
-            const folded = finding.field.slice('prop:'.length);
-            if (this.valueSays.has(folded)) continue;
-            const { row, says } = createFormRow(this.sectionEl, finding.key);
-            row.addClass('task-hub__row--locked');
-            this.valueSays.set(folded, says);
-            const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
-            valueInput.disabled = true;
-            this.valueInputs.set(folded, valueInput);
-        }
+        // The rows as the task is now. What a row shows is read once here; a
+        // commit reads `ctx.task().properties` as it fires, since a write
+        // echoed while the focus keeps the rows from being built anew leaves
+        // what was read here behind.
+        for (const row of this.rows()) this.renderRow(row);
 
         // 追加行 — キーはラベル列に収め、値 input の左端を上の行と揃える
         const { row: addRow, labelEl: addLabelEl, says: addSays } = createFormRow(this.sectionEl, '');
@@ -165,8 +141,9 @@ export class PropertiesFieldGroup implements ClosingPart {
         // キーを選ぶと値の欄へ移り、値を選ぶと行を足す。
         const keySuggest = this.offer(keyInput, {
             candidates: (q) => {
+                const rows = this.rows();
                 return FilterValueCollector.collectPropertyKeys(this.ctx.index.getTasks())
-                    .filter(k => !PropertyKey.get(effective, k) && !this.ctx.locked(`prop:${PropertyKey.fold(k)}`))
+                    .filter(k => !PropertyRows.takenBy(rows, k))
                     .filter(k => !q || k.toLowerCase().includes(q.toLowerCase()));
             },
             pick: (val) => {
@@ -244,26 +221,69 @@ export class PropertiesFieldGroup implements ClosingPart {
         if (focus) this.lists.get(focus.folded)?.focusTarget(focus.focus)?.focus();
     }
 
-    /**
-     * The row of a property whose value is one text (a value, or no value):
-     * its own value edited in place, or the inherited one shown, which typed
-     * again is made the row's own.
-     */
-    private renderValueRow(folded: string, key: string, pv: PropertyValue, isOwn: boolean): void {
-        const task = this.ctx.task();
-        const shut = this.ctx.isShut();
-        const locked = this.ctx.locked(`prop:${folded}`);
+    /** The rows as the task, its drafts and its findings are now (`PropertyRows`). */
+    private rows(): PropertyRow[] {
+        return PropertyRows.of({
+            task: this.ctx.task(),
+            drafts: this.drafts,
+            findings: this.ctx.findings(),
+            locked: (field) => this.ctx.locked(field),
+        });
+    }
 
-        const { row, says } = createFormRow(this.sectionEl, key);
-        if (!isOwn) row.addClass('task-hub__row--cascade');
-        if (locked) row.addClass('task-hub__row--locked');
+    /** A property's row, drawn as `PropertyRows.formOf` says it is. */
+    private renderRow(prop: PropertyRow): void {
+        const { folded, key } = prop;
+        const form = PropertyRows.formOf(prop);
+        const { field } = form;
+        const disabled = this.ctx.isShut() || prop.locked;
+
+        const { row, says } = createFormRow(this.sectionEl, key, field.kind === 'list' ? { alignStart: true } : undefined);
+        if (field.kind === 'list') row.addClass('task-hub__row--list');
+        if (form.inheritedLook) row.addClass('task-hub__row--cascade');
+        if (prop.locked) row.addClass('task-hub__row--locked');
         this.valueSays.set(folded, says);
 
-        const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
-        valueInput.value = shownText(pv);
+        if (field.kind === 'text') this.textField(row, folded, key, field, disabled);
+        else if (field.kind === 'list') this.listField(row, folded, key, field, disabled);
+        else {
+            const valueInput = row.createEl('input', { type: 'text', cls: VALUE_INPUT_CLS });
+            valueInput.disabled = true;
+            this.valueInputs.set(folded, valueInput);
+        }
+
+        if (form.remove) {
+            const remove = form.remove === 'line'
+                ? () => { this.remove(key); }
+                // The draft is not written yet: its × throws it away, and the inherited list shows again.
+                : () => { this.drafts.delete(folded); };
+            this.removeButton(row, key, disabled, remove);
+        }
+        if (form.source) this.sourceLabel(row, key, form.source);
+        if (form.hide) this.hideButton(row, key, disabled);
+        if (form.makeOwn && field.kind === 'list' && !disabled) {
+            const items = field.items;
+            const makeOwn = row.createEl('button', { cls: 'task-hub__make-own', text: t('modal.hub.makeOwnList'), attr: { type: 'button' } });
+            // The focus is not put in the draft: a tap on the button brings up no keyboard.
+            makeOwn.addEventListener('click', () => {
+                this.drafts.set(folded, [...items]);
+                this.render(true);
+            }, { signal: this.built.signal });
+        }
+    }
+
+    /**
+     * The field of a property whose value is one text (a value, or no
+     * value): its own value edited in place, or the inherited one shown,
+     * which typed again is made the row's own.
+     */
+    private textField(row: HTMLElement, folded: string, key: string, field: PropertyRowField & { kind: 'text' }, disabled: boolean): void {
+        const { shown, editsOwn } = field;
+        const valueInput = row.createEl('input', { type: 'text', cls: VALUE_INPUT_CLS });
+        valueInput.value = shownText(shown);
         // No value written as none (`- key::`): the field is empty, and says so.
-        if (pv.type === 'null') valueInput.placeholder = t('modal.hub.noValue');
-        valueInput.disabled = shut || locked;
+        if (shown.type === 'null') valueInput.placeholder = t('modal.hub.noValue');
+        valueInput.disabled = disabled;
         this.valueInputs.set(folded, valueInput);
 
         const suggest = this.offer(valueInput, {
@@ -280,25 +300,39 @@ export class PropertiesFieldGroup implements ClosingPart {
         const value = bindField(valueInput, {
             codec: FreeText,
             current: () => {
-                const shown = isOwn ? PropertyKey.get(this.ctx.task().properties, key)?.value : pv;
-                return shown ? shownText(shown) : '';
+                const now = editsOwn ? PropertyKey.get(this.ctx.task().properties, key)?.value : shown;
+                return now ? shownText(now) : '';
             },
             // An own line keeps its key as written; an inherited value made
             // the task's own is written under the key it was inherited by.
             commit: (raw) => raw.trim() === '' ? this.remove(key) : this.set(key, raw),
             issues: () => { /* any text is a value */ },
             takesEnter: () => suggest.listShown,
-            takesSame: () => !isOwn,
+            takesSame: () => !editsOwn,
             signal: this.built.signal,
         });
         this.valueBound.set(folded, value);
+    }
 
-        if (isOwn) {
-            this.removeButton(row, key, shut || locked, () => { this.remove(key); });
-            return;
-        }
-        this.sourceLabel(row, task, key);
-        if (pv.type !== 'null') this.hideButton(row, key, shut || locked);
+    /**
+     * The field of a property whose value is a list: the row's own items (its
+     * list, or a draft made of the inherited ones, written by its first
+     * edit) edited item by item, or the inherited items shown
+     * (`PropertyListField`).
+     */
+    private listField(row: HTMLElement, folded: string, key: string, field: PropertyRowField & { kind: 'list' }, disabled: boolean): void {
+        this.lists.set(folded, new PropertyListField(row, {
+            app: this.ctx.app,
+            key,
+            at: `prop:${folded}`,
+            own: field.editsOwn,
+            items: field.items,
+            disabled,
+            candidates: () => this.candidates(key),
+            write: (next, focus) => this.writeList(folded, key, next, focus),
+            say: (source, issues) => this.ctx.issues.set(source, issues),
+            signal: this.built.signal,
+        }));
     }
 
     /**
@@ -317,60 +351,6 @@ export class PropertiesFieldGroup implements ClosingPart {
         }, { signal: this.built.signal });
     }
 
-    /**
-     * The row of a property whose value is a list: the row's own items
-     * (`own`, or a `draft` made of the inherited ones, written by its first
-     * edit) edited item by item, or the inherited items shown, with the
-     * line they are written on to open and the row made its own from a copy
-     * of them (`PropertyListField`). An own list has no × that takes its
-     * whole line out; a draft's × throws the draft away.
-     */
-    private renderListRow(folded: string, key: string, items: readonly PropertyScalar[], kind: 'own' | 'draft' | 'inherited'): void {
-        const task = this.ctx.task();
-        const shut = this.ctx.isShut();
-        const locked = this.ctx.locked(`prop:${folded}`);
-        const at: HubField = `prop:${folded}`;
-
-        const { row, says } = createFormRow(this.sectionEl, key, { alignStart: true });
-        row.addClass('task-hub__row--list');
-        if (kind === 'inherited') row.addClass('task-hub__row--cascade');
-        if (locked) row.addClass('task-hub__row--locked');
-        this.valueSays.set(folded, says);
-
-        const field = new PropertyListField(row, {
-            app: this.ctx.app,
-            key,
-            at,
-            own: kind !== 'inherited',
-            items,
-            disabled: shut || locked,
-            candidates: () => this.candidates(key),
-            write: (next, focus) => this.writeList(folded, key, next, focus),
-            say: (source, issues) => this.ctx.issues.set(source, issues),
-            signal: this.built.signal,
-        });
-        this.lists.set(folded, field);
-
-        // The row's own list has no × of its own: it would stand beside the
-        // items' ×s and look as theirs do. Its items taken out, the last
-        // takes the line out with it.
-        if (kind === 'own') return;
-        if (kind === 'draft') {
-            // The draft is not written yet: its × throws it away, and the inherited list shows again.
-            this.removeButton(row, key, shut || locked, () => { this.drafts.delete(folded); });
-            return;
-        }
-        this.sourceLabel(row, task, key);
-        this.hideButton(row, key, shut || locked);
-        if (shut || locked) return;
-        const makeOwn = row.createEl('button', { cls: 'task-hub__make-own', text: t('modal.hub.makeOwnList'), attr: { type: 'button' } });
-        // The focus is not put in the draft: a tap on the button brings up no keyboard.
-        makeOwn.addEventListener('click', () => {
-            this.drafts.set(folded, [...items]);
-            this.render(true);
-        }, { signal: this.built.signal });
-    }
-
     /** The × that takes the row's own property out (or throws a draft away), and builds the rows anew. */
     private removeButton(row: HTMLElement, key: string, disabled: boolean, remove: () => void): void {
         const removeBtn = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove task-hub__prop-remove' });
@@ -385,8 +365,7 @@ export class PropertiesFieldGroup implements ClosingPart {
     }
 
     /** Where an inherited value is written, opened from the row when there is a row to open. */
-    private sourceLabel(row: HTMLElement, task: Task, key: string): void {
-        const source = CascadeSource.forProperty(task, key);
+    private sourceLabel(row: HTMLElement, key: string, source: CascadeSourceKind): void {
         const sourceEl = row.createSpan({ cls: 'task-hub__source', text: CascadeSource.label(source) });
         const open = this.ctx.openSource;
         if (open) sourceEl.addEventListener('click', () => open(copy => CascadeSource.lineOfProperty(copy, key)), { signal: this.built.signal });
@@ -528,6 +507,8 @@ export class PropertiesFieldGroup implements ClosingPart {
         return field ?? this.addKeyInput ?? null;
     }
 }
+
+const VALUE_INPUT_CLS = 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control';
 
 /** The field of the property `key`'s row, as its issues are said of it. */
 function propField(key: string): HubField {
