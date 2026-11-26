@@ -56,6 +56,11 @@ import { DestinationText } from './DestinationText';
  *   while no error is said of what the dialog holds, and the host holds a
  *   draft for every row that can be written; why one cannot is the host's
  *   to say. The answer to the last send keeps none from being asked again.
+ * - A dialog on one row told where it stands (`SendOptions.stands`) does
+ *   not send it there: the note it is in and the heading it stands under
+ *   (the note's end for a row above the first heading). The send would
+ *   still move it, to the section's head or end and out from under its
+ *   parent. Said under the note, in place of where the row goes.
  * - A send not made keeps the drafts and says why; a send made is told to
  *   the host, which closes what the dialog is shown in. A send made for some
  *   rows only says why too, and offers no send again: the rows that went
@@ -103,6 +108,20 @@ export interface SendSurface {
     render(state: SendViewState): void;
 }
 
+/** Where a row stands: its note, and the heading it stands under, null above the note's first heading. */
+export interface RowStand {
+    note: string;
+    heading: string | null;
+}
+
+/** What a dialog opens with besides its rows. */
+export interface SendOptions {
+    /** The fields as it opens; none: the preview's defaults (`initialAsk`). */
+    initial?: DestinationAsk;
+    /** Where the one row the dialog sends stands now: no send is asked there. None: every place may be sent to. */
+    stands?: RowStand;
+}
+
 export interface SendHost {
     /** What the destination the fields name is (`NoteOps.destinationFacts`). */
     facts(ask: DestinationAsk): Promise<DestinationFacts>;
@@ -144,8 +163,9 @@ export class SendDialog {
         private readonly preview: SendPreview,
         private readonly host: SendHost,
         private readonly surface: SendSurface,
+        private readonly options: SendOptions = {},
     ) {
-        this.ask = initialAsk(preview);
+        this.ask = { ...(options.initial ?? initialAsk(preview)) };
         this.rows = preview.rows.map(row => ({ taskId: row.task.id, base: rowBase(row) }));
         void this.lookUp();
     }
@@ -191,14 +211,17 @@ export class SendDialog {
         }
         const timers = this.timersRefuse(note);
         if (timers !== null) error('form', timers);
-        if (note) {
+        const stays = note !== null && this.staysAt(note);
+        if (stays) {
+            held.push({ at: 'note', tone: 'info', text: t('modal.send.samePlace') });
+        } else if (note) {
             held.push(...noteText(note).map(says => ({ at: 'note' as const, ...says })));
             const says = headingText(note);
             if (says) held.push({ at: 'heading', ...says });
-            held.push(...this.warningsOf(note));
         }
+        if (note) held.push(...this.warningsOf(note));
         const canSend = this.phase === 'open' && this.answer.caughtUp && this.host.drafts() !== null
-            && !held.some(issue => issue.tone === 'error');
+            && !stays && !held.some(issue => issue.tone === 'error');
 
         return {
             phase: this.phase,
@@ -273,6 +296,14 @@ export class SendDialog {
             return;
         }
         this.render();
+    }
+
+    /** Whether a send to `facts` leaves the row where it stands: its own note, under the heading it stands under. */
+    private staysAt(facts: NoteFacts): boolean {
+        const stands = this.options.stands;
+        if (!stands || facts.kind !== 'same' || facts.path !== stands.note) return false;
+        const spot = facts.to.spot;
+        return (spot === 'end' ? null : spot.heading) === stands.heading;
     }
 
     private isChecked(candidate: InheritedValue): boolean {

@@ -14,6 +14,7 @@ import { Block, type HeadingLookup } from '../persistence/utils/Placement';
 import type { Operations } from '../operations/Operations';
 import type { WriteAnswer, WriteTelling } from '../operations/WriteAnswer';
 import { spotIn, type DestinationAsk, type NoteDestination } from './NotePlaces';
+import { NoteName } from './NoteName';
 
 /**
  * The note a place to create in is in, by what it is: the daily note of
@@ -138,9 +139,7 @@ export class CreatePlaces {
      * empty for the note's end.
      */
     askOf(place: PlaceInNote): DestinationAsk {
-        const path = this.pathOf(place.note);
-        const name = path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
-        return { note: { text: name, picked: path }, heading: place.spot === 'end' ? '' : place.spot.heading };
+        return { note: NoteName.askOf(this.pathOf(place.note)), heading: place.spot === 'end' ? '' : place.spot.heading };
     }
 
     /**
