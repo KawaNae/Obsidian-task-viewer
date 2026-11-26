@@ -74,7 +74,7 @@ const LOW_WINDOW = 600;
 
 /** The window's inner size and the keyboard's height that hide Details' last field in the desktop's box (px). */
 const KEYBOARD_WINDOW = { width: 656, height: 1000 };
-const KEYBOARD_HEIGHT = 520;
+const KEYBOARD_HEIGHT = 600;
 
 const OTHER_NAME = 'test-int-draft-tabs-other';
 const OTHER_FILE = `${OTHER_NAME}.md`;
@@ -488,6 +488,7 @@ describe('Details\' last field under a keyboard, in the desktop\'s box', () => {
                 field.focus({ preventScroll: true });
                 out.focused = document.activeElement === field;
                 out.start = b.scrollTop;
+                out.fieldBefore = field.getBoundingClientRect().bottom;
                 const frames = await recordFrames(root, b, field, ${KEYBOARD_HEIGHT}, { after: showKeyboardAsIPad(${KEYBOARD_HEIGHT}) });
                 out.rest = frames.at(-1);
                 out.written = b.style.paddingBottom;
@@ -514,6 +515,8 @@ describe('Details\' last field under a keyboard, in the desktop\'s box', () => {
         if (file === CHILD_FILE) expect(heights.detail).toBeLessThan(heights.basic);
         else expect(heights.detail).toBeGreaterThan(heights.basic);
         expect(steps.focused).toBe(true);
+        // The field stands below where it is to ride: what the keyboard is sized for.
+        expect(steps.fieldBefore as number).toBeGreaterThan(KEYBOARD_WINDOW.height - KEYBOARD_HEIGHT - 10);
         const rest = steps.rest as Frame;
         // The keyboard hides the field: the body moved for it.
         expect(rest.scrollTop).toBeGreaterThan(steps.start as number);

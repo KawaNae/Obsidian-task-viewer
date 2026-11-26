@@ -191,7 +191,11 @@
     gap: 4px;
 }
 
+/* 札は行と同じ上の間隔を持つ。札があってもなくても、見出しから初めの
+   ものまでが行の上の間隔（6px）になる。札の列は flex の中にあり、
+   margin が見出しの側へ畳まれないため、ここで持つ */
 .task-hub__tag-pills {
+    margin-top: 6px;
     margin-left: calc(var(--tv-form-label-width, 7em) + 8px);
 }
 
@@ -202,7 +206,7 @@
 .task-hub__tag-chip--cascade {
     background: var(--tv-bg-secondary);
     color: var(--tv-text-muted);
-    border: 1px dashed var(--tv-border);
+    border: 1px dashed var(--tv-text-faint);
 }
 
 /* --- Status pill --- */
