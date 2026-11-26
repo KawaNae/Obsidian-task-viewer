@@ -744,7 +744,7 @@ describe('the line above the create of a hub on a task not written yet', () => {
         expect(row.children[0]).toBe(toggle(s));
         expect(toggle(s).attrs.get('data-icon')).toBe('chevron-down');
         expect(toggle(s).attrs.get('aria-expanded')).toBe('true');
-        expect(toggle(s).attrs.get('aria-label')).toBe(t('modal.newTask.hideLine'));
+        expect(toggle(s).attrs.get('aria-label')).toBe('Hide what Create does');
     });
 
     it('is hidden whole by its button, which then reads as what it would show, and shown again by it', async () => {
@@ -753,7 +753,7 @@ describe('the line above the create of a hub on a task not written yet', () => {
         expect(shown(s)).toBe(false);
         expect(toggle(s).attrs.get('data-icon')).toBe('chevron-up');
         expect(toggle(s).attrs.get('aria-expanded')).toBe('false');
-        expect(toggle(s).attrs.get('aria-label')).toBe(t('modal.newTask.showLine'));
+        expect(toggle(s).attrs.get('aria-label')).toBe('Show what Create does');
 
         s.press(toggle(s));
         expect(shown(s)).toBe(true);
@@ -770,7 +770,7 @@ describe('the line above the create of a hub on a task not written yet', () => {
         expect(shown(s)).toBe(false);
         expect(toggle(s).attrs.get('data-icon')).toBe('alert-triangle');
         expect(toggle(s).classes.has('is-error')).toBe(true);
-        expect(toggle(s).attrs.get('aria-label')).toBe(t('modal.newTask.showLineError'));
+        expect(toggle(s).attrs.get('aria-label')).toBe('Show what Create does (it has an error)');
     });
 
     it('hides a warning too, its button marked in the warning\'s tone while hidden', async () => {
@@ -782,7 +782,7 @@ describe('the line above the create of a hub on a task not written yet', () => {
         expect(toggle(s).attrs.get('data-icon')).toBe('alert-triangle');
         expect(toggle(s).classes.has('is-warning')).toBe(true);
         expect(toggle(s).classes.has('is-error')).toBe(false);
-        expect(toggle(s).attrs.get('aria-label')).toBe(t('modal.newTask.showLineWarning'));
+        expect(toggle(s).attrs.get('aria-label')).toBe('Show what Create does (it has a warning)');
     });
 
     it('stays hidden when the place says the same again, and shows again when what it says changes', async () => {
@@ -957,6 +957,23 @@ describe('a hub whose host comes to hold something not written yet and lets it g
         expect(row.children[0]).toBe(s.toggle());
         expect(row.children.at(-1)).toBe(s.act());
         expect(row.children.indexOf(s.cancel())).toBeLessThan(row.children.indexOf(s.act()!));
+    });
+
+    it('names the line\'s button by what the write held now does: what it would hide, or show and what it hides', () => {
+        const s = setUpHeld();
+        const label = () => s.toggle()!.attrs.get('aria-label');
+        s.hold(s.draftOf(t('modal.send.send')));
+        expect(label()).toBe('Hide what Move does');
+        s.press(s.toggle()!);
+        expect(label()).toBe('Show what Move does');
+        s.form.sayWrite('write refused');
+        s.press(s.toggle()!);
+        expect(label()).toBe('Show what Move does (it has an error)');
+
+        s.hold(s.draftOf(t('modal.create')));
+        expect(label()).toBe('Show what Create does (it has an error)');
+        s.press(s.toggle()!);
+        expect(label()).toBe('Hide what Create does');
     });
 
     it('says a refusal of the write above the write, and of a change the fields handed on above the tabs, whatever is held', async () => {
