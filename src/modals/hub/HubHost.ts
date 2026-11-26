@@ -66,6 +66,14 @@ export interface HubForm {
      * typing in a field withdraws it.
      */
     edited(): void;
+    /**
+     * The host has come into a move from within the hub, all of it drawn
+     * (the place's fields, the row of buttons, what is said above the
+     * write): the place's first field takes the focus (`HubPlace.focus`),
+     * its tab chosen first, as the hub's menu focuses a field. A hub opened
+     * in a move is not told: the overlay's first focus goes there.
+     */
+    focusPlace(): void;
 }
 
 /**

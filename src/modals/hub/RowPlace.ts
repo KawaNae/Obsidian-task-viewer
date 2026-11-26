@@ -34,9 +34,12 @@ export interface RowPlaceHost {
  * parent. What the send says of the move as a whole is the host's to say,
  * above the write.
  *
- * Which of the two it is, it reads from the host each time it is refreshed:
- * going into a move, the focus goes to the note field; coming out of one,
- * to the button.
+ * Which of the two it is, it reads from the host each time it is refreshed.
+ * Coming out of a move, the focus goes to the button. Going into one, the
+ * focus is not put here: the form's row of buttons and what is said above
+ * [Move] are drawn after the place, and shrink the body, so the host puts
+ * it once all of it is drawn (`HubForm.focusPlace`), on the field
+ * {@link focus} answers.
  */
 export class RowPlace implements HubPlace, SendSurface {
     private readonly shown: PlaceShown;
@@ -95,7 +98,7 @@ export class RowPlace implements HubPlace, SendSurface {
         this.errorAt = ofFields.find(issue => issue.tone === 'error')?.at ?? null;
     }
 
-    /** The shown place gives way to the move's fields, the focus on the note. */
+    /** The shown place gives way to the move's fields. */
     private enter(move: PlaceMove): void {
         const fields = new SendFields(this.app, this.shown.el.parentElement!, {
             initial: move.initial,
@@ -115,7 +118,6 @@ export class RowPlace implements HubPlace, SendSurface {
         this.errorAt = null;
         fields.setEnabled(this.enabled);
         move.show(this);
-        placeFocus(fields.focus('note'));
     }
 
     /** The move's fields give way to the shown place again, the focus on the button. */

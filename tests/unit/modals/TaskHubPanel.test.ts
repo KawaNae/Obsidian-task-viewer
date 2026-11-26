@@ -35,7 +35,7 @@ import { TFile } from '../mocks/obsidian';
 
 const { shells, forms, sources, views, panes, paneHas } = vi.hoisted(() => ({
     shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown; initialFocus?: () => unknown } | null; close(): void }[],
-    forms: [] as { el: unknown; host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn>; focusOf: ReturnType<typeof vi.fn>; notWritten: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
+    forms: [] as { el: unknown; host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn>; focusOf: ReturnType<typeof vi.fn>; notWritten: ReturnType<typeof vi.fn>; focusPlace: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     sources: [] as { host: unknown; redraw: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     views: [] as { slots: Record<string, unknown> }[],
     panes: [] as { el: unknown; input: unknown; opts: { initial: unknown; host: unknown }; setEnabled: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
@@ -87,6 +87,8 @@ vi.mock('../../../src/modals/hub/TaskHubForm', () => ({
         putTyped() { return true; }
         create() { }
         notWritten = vi.fn();
+        edited() { }
+        focusPlace = vi.fn();
         dispose = vi.fn(() => { this.place?.dispose(); });
     },
 }));
@@ -606,6 +608,8 @@ describe('the hub on a row in a move', () => {
         const focus = shells[0].opts!.initialFocus!() as { to: FocusEl };
         expect(r.body.find('task-hub__place')!.contains(focus.to)).toBe(true);
         expect(focus.to.value).toBe('Plan');
+        // The overlay puts that first focus: the host asks for none of its own.
+        expect(forms[0].focusPlace).not.toHaveBeenCalled();
     });
 
     it('opens nothing on a row the disk does not hold as the index read it', async () => {
@@ -651,6 +655,8 @@ describe('the hub on a row in a move', () => {
         expect(r.body.find('task-hub__place')).not.toBeNull();
         const move = (host as unknown as { moving(): { initial: DestinationAsk } }).moving();
         expect(move.initial).toEqual({ note: { text: 'Plan', picked: null }, heading: 'Tasks' });
+        // Once it is all drawn, the place's first field takes the focus, as from the place's button.
+        expect(forms[0].focusPlace).toHaveBeenCalledTimes(1);
 
         // The card in the move is drawn from the draft, which binds no menu (`RenderOptions.rows`):
         // a menu opened on the card before the move was held is what can still ask.

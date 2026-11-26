@@ -88,6 +88,7 @@ function rig(seed: Parameters<typeof makeHost>[0] = {}, place: CreatePlace | nul
         // Told with whether the fields are open and whether a create may be asked then.
         notWritten: vi.fn(() => { told.push(`unwritten:${host.shut() === null}:${host.canCreate()}`); }),
         edited: vi.fn(),
+        focusPlace: vi.fn(),
     };
     const panel = { redrawPreview: vi.fn(() => { told.push('card'); }), close: vi.fn() };
     host.bind(form);

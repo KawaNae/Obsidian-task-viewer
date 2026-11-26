@@ -461,6 +461,7 @@ class PlaceOnly implements HubForm {
     }
     notWritten(): void { }
     edited(): void { }
+    focusPlace(): void { }
 
     dispose(): void {
         this.place.dispose();

@@ -322,7 +322,9 @@ export class RowHost implements PanelHost, RowPlaceHost {
      * the disk (the user is told), or the hub closed meanwhile. The source
      * mode is held while the move is begun: it does not open then, on
      * neither seat. Once what is typed is put in, the fields are shut until
-     * the move is held, or open again as they were when none is.
+     * the move is held, or open again as they were when none is. Held, the
+     * place's first field takes the focus (`HubForm.focusPlace`) once the
+     * move is all drawn.
      */
     async beginMove(start: MoveStart): Promise<void> {
         const form = this.form;
@@ -350,6 +352,9 @@ export class RowHost implements PanelHost, RowPlaceHost {
             this.source.hold(false);
             if (!this.move && !this.closed) form.showShut();
         }
+        // Once the move is held and all of it drawn: the body has shrunk to
+        // the row of buttons by then, so the field focused stands in it.
+        if (this.move) form.focusPlace();
     }
 
     /** Whether a move begun may still be held: the hub open on the row, the fields not shut but by the beginning itself. */
