@@ -267,6 +267,19 @@ describe('a property\'s value emptied keeps its row: no value is written', () =>
         expect(s.valueOf('tags2').value).toBe('');
     });
 
+    it('takes an item in focus out by its ×, typed over or not, written once and the focus put in no field', () => {
+        for (const typed of [null, 'A']) {
+            const s = setUp(byKey({ tags2: { type: 'list', items: [text('a'), text('b')] } }));
+            const item = s.rowOf('tags2')!.findAll('task-hub__list-item').find(one => !one.classes.has('task-hub__list-item--add'))!;
+            const field = item.find('tv-ctrl__text-input')!;
+            field.focus();
+            if (typed !== null) field.type(typed);
+            item.find('tv-form__clear-button')!.press();
+            expect(s.writes.map(valuesOf), String(typed)).toEqual([{ tags2: { type: 'list', items: [text('b')] } }]);
+            expect(s.doc.activeElement, String(typed)).toBe(s.doc.body);
+        }
+    });
+
     it('writes no value over an inherited value emptied, which it hides', () => {
         const s = setUp({}, { inherited: byKey({ Place: text('home') }) });
         s.valueOf('Place').focus();

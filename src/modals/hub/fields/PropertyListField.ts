@@ -60,8 +60,9 @@ export interface PropertyListFieldOptions {
  *
  * A write builds the rows anew, and the focus stays where it was: in the
  * add field, or in the item it was in at that item's new place (the add
- * field when the item is gone). Focus outside the list's inputs is not
- * moved, so a tap on an item's × or handle brings up no keyboard.
+ * field when the item emptied is gone). Focus outside the list's inputs is
+ * not moved, and an item taken out by its × leaves the focus it held in no
+ * field, so a tap on an item's × or handle brings up no keyboard.
  *
  * An inherited list is shown as it is, its items as chips, and
  * not edited here: its source is opened from the row's menu, and the row
@@ -150,10 +151,11 @@ export class PropertyListField {
             }, { signal: this.opts.signal });
 
             // The item's × stands in its field's end, and takes the item out.
-            // None while nothing is edited.
+            // As any × that does not keep the focus in its field, it leaves
+            // the focus the item held in no field. None while nothing is edited.
             if (!disabled) {
                 new ClearButton(box, input, {
-                    clear: () => this.writeKept(...removed(this.opts.items, index)),
+                    clear: () => this.writeKept(...removed(this.opts.items, index), null),
                     focusesField: false,
                     label: t('modal.hub.removeItem', { item: item.spelling }),
                 });
@@ -256,9 +258,9 @@ export class PropertyListField {
      * Write `items` with the focus kept where it is (or is going, while an
      * input blurs). `order` names, for each place in `items`, the place the
      * item had; an item that is not there any more leaves the focus it held
-     * to the add field.
+     * to `lost`: the add field, or no field when it is null.
      */
-    private writeKept(items: PropertyScalar[], order: readonly number[]): void {
+    private writeKept(items: PropertyScalar[], order: readonly number[], lost: ListFocus | null = 'add'): void {
         const doc = this.el.ownerDocument;
         const active = doc.activeElement && doc.activeElement !== doc.body ? doc.activeElement : this.leftFor;
         let focus: ListFocus | undefined;
@@ -267,7 +269,7 @@ export class PropertyListField {
             const from = this.itemInputs.findIndex(input => input === active);
             if (from !== -1) {
                 const to = order.indexOf(from);
-                focus = to === -1 ? 'add' : to;
+                focus = to === -1 ? lost ?? undefined : to;
             }
         }
         this.opts.write(items, focus);
