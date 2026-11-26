@@ -304,17 +304,17 @@ export class TaskHubForm implements HubForm {
         // --- Where the task goes: the entry's ---
         this.place = this.deps.place?.(basic) ?? null;
 
-        // --- Tags ---
-        const tagsGroup = detail.createDiv({ cls: 'tv-form__group' });
-        this.tagsField = new TagsFieldGroup(tagsGroup, this.fieldCtx);
-
-        // --- Color / Linestyle / Mask ---
-        const styleGroup = detail.createDiv({ cls: 'tv-form__group' });
-        this.styleField = new StyleFieldGroup(styleGroup, this.fieldCtx);
+        // Each group of the details opens with its heading, in the group, so
+        // the group's padding stands above the heading and not under it.
+        // --- Built-in properties: Tags / Color / Linestyle / Mask ---
+        const builtinGroup = detail.createDiv({ cls: 'tv-form__group' });
+        builtinGroup.createEl('h4', { text: t('modal.hub.builtinProperties'), cls: 'tv-form__section-label tv-form__section-label--quiet' });
+        this.tagsField = new TagsFieldGroup(builtinGroup, this.fieldCtx);
+        this.styleField = new StyleFieldGroup(builtinGroup, this.fieldCtx);
 
         // --- Custom properties ---
-        detail.createEl('h4', { text: t('modal.hub.properties'), cls: 'tv-form__section-label' });
         const propsGroup = detail.createDiv({ cls: 'tv-form__group' });
+        propsGroup.createEl('h4', { text: t('modal.hub.customProperties'), cls: 'tv-form__section-label tv-form__section-label--quiet' });
         this.propsField = new PropertiesFieldGroup(propsGroup, this.fieldCtx);
 
         // The row of buttons, and the question a close puts in it, in the

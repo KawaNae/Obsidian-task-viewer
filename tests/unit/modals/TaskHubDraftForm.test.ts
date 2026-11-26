@@ -554,6 +554,19 @@ describe('the tabs of a hub on a task not written yet', () => {
         for (const field of ['tags', 'color', 'linestyle', 'mask', 'properties'] as const) expect(detail.contains(s.el(field))).toBe(true);
     });
 
+    it('hold the details in two groups, each opening with its heading: the built-in properties, then the custom ones', async () => {
+        const s = await setUp({}, { place: true });
+        const detail = s.body.find('task-hub__pane--detail')!;
+        const groups = detail.children.filter(child => child.classes.has('tv-form__group'));
+        expect(groups).toHaveLength(2);
+        expect(detail.children.filter(child => child.classes.has('tv-form__section-label'))).toEqual([]);
+        const headings = groups.map(group => group.children[0]);
+        expect(headings.map(classesOf)).toEqual(Array(2).fill('tv-form__section-label tv-form__section-label--quiet'));
+        expect(headings.map(heading => heading.text)).toEqual([t('modal.hub.builtinProperties'), t('modal.hub.customProperties')]);
+        for (const field of ['tags', 'color', 'linestyle', 'mask'] as const) expect(groups[0].contains(s.el(field))).toBe(true);
+        expect(groups[1].contains(s.el('properties'))).toBe(true);
+    });
+
     it('have the dates\' group last in the basic tab where there is no place', async () => {
         const s = await setUp();
         const groups = s.body.find('task-hub__pane--basic')!.children.filter(child => child.classes.has('tv-form__group'));

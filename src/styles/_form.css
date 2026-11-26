@@ -128,6 +128,14 @@
     color: var(--tv-text-muted);
 }
 
+/* group の中の先頭に置く控えめな見出し（ハブの詳細）。margin を持たず、
+   見出しから初めの行までは、次の行の上の間隔（6px）だけが空く */
+.tv-form__section-label--quiet {
+    margin: 0;
+    font-size: var(--font-ui-smaller);
+    font-weight: 400;
+}
+
 /* セクション: 透明な面を区切り線で分ける（タスクハブ、送るダイアログ）。
    最後のグループは区切り線なし。group の後ろに error / notice 要素が
    並ぶため :last-child では届かない — 「後続に group がない group」で選ぶ */
