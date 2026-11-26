@@ -33,6 +33,23 @@ afterEach(() => { live?.dispose(); live = undefined; vi.restoreAllMocks(); });
 /** Let the asks of where the fields name, and the scans, answer. */
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
+/** A promise answered when the test says. */
+function gate() {
+    let open!: () => void;
+    const shut = new Promise<void>(resolve => { open = resolve; });
+    return { shut, open };
+}
+
+/** Hold the read of the row: it answers what it read once `wait` is open. */
+function holdRead(noteOps: NoteOps, wait: Promise<void>) {
+    const read = noteOps.previewSend.bind(noteOps);
+    return vi.spyOn(noteOps, 'previewSend').mockImplementation(async (ids) => {
+        const preview = await read(ids);
+        await wait;
+        return preview;
+    });
+}
+
 /**
  * A host on the row `Row` of `lines`, its form bound and its hub attached.
  * `opening`: the hub opens in a move of the row from where it says, the row
@@ -163,6 +180,87 @@ describe('beginning a move', () => {
         await g.begin();
         expect(g.host.draft()).toBeNull();
     });
+
+    it('takes no change of the fields while it is begun, the fields shut with nothing said, and holds the move on the row as read', async () => {
+        const h = await open();
+        const wait = gate();
+        holdRead(h.noteOps, wait.shut);
+        const begun = h.host.beginMove('here');
+        expect(h.host.shut()).toBe('');
+        expect(h.told).toContain('shut:');
+        expect(await h.host.put({ content: 'Typed' })).toBe(false);
+        wait.open();
+        await begun;
+        await settle();
+        expect(h.lines()).toEqual(NOTE);
+        expect(h.host.task().content).toBe('Row');
+        expect(h.host.shut()).toBeNull();
+        expect(h.place.at(-1)).toEqual([]);
+    });
+
+    it('asked again while it is begun, reads the row once', async () => {
+        const h = await open();
+        const wait = gate();
+        const read = holdRead(h.noteOps, wait.shut);
+        const first = h.host.beginMove('here');
+        const again = h.host.beginMove('defaults');
+        wait.open();
+        await Promise.all([first, again]);
+        expect(read).toHaveBeenCalledTimes(1);
+        expect(h.move().initial.heading).toBe('Tasks');
+    });
+
+    it('does not begin once a write asked before was refused, the fields open again', async () => {
+        const h = await open();
+        vi.spyOn(h.session.ops, 'updateTask').mockResolvedValueOnce({ written: false, refused: null });
+        const read = vi.spyOn(h.noteOps, 'previewSend');
+        void h.host.put({ content: 'Typed' });
+        await h.begin();
+        expect(h.host.draft()).toBeNull();
+        expect(read).not.toHaveBeenCalled();
+        expect(h.host.shut()).toBeNull();
+        expect(h.told.at(-1)).toBe('shut:null');
+        expect(h.source.hold.mock.calls).toEqual([[true], [false]]);
+    });
+
+    it('does not begin once the hub closed, or the row was lost, before the row is read', async () => {
+        for (const meanwhile of ['closed', 'lost'] as const) {
+            const h = await open();
+            const wait = gate();
+            const write = h.session.ops.updateTask.bind(h.session.ops);
+            vi.spyOn(h.session.ops, 'updateTask').mockImplementationOnce(async (...args) => { await wait.shut; return write(...args); });
+            const read = vi.spyOn(h.noteOps, 'previewSend');
+            void h.host.put({ content: 'Typed' });
+            const begun = h.host.beginMove('here');
+            if (meanwhile === 'closed') h.host.dispose();
+            else await h.writeOutside(['# Tasks', '- [ ] Other', '']);
+            wait.open();
+            await begun;
+            expect(read).not.toHaveBeenCalled();
+            expect(h.host.draft()).toBeNull();
+            live?.dispose();
+            live = undefined;
+        }
+    });
+
+    it('does not begin once the hub closed, or the row was lost, after the row is read', async () => {
+        for (const meanwhile of ['closed', 'lost'] as const) {
+            const h = await open();
+            const wait = gate();
+            holdRead(h.noteOps, wait.shut);
+            const begun = h.host.beginMove('here');
+            await settle();
+            if (meanwhile === 'closed') h.host.dispose();
+            else await h.writeOutside(['# Tasks', '- [ ] Other', '']);
+            wait.open();
+            await begun;
+            expect(h.host.draft()).toBeNull();
+            expect(h.source.hold.mock.calls.at(-1)).toEqual([false]);
+            if (meanwhile === 'lost') expect(h.host.shut()).toBe(t('modal.hub.taskMissing'));
+            live?.dispose();
+            live = undefined;
+        }
+    });
 });
 
 describe('while the row moves', () => {
@@ -258,6 +356,22 @@ describe('the move', () => {
         expect(h.host.draft()).not.toBeNull();
     });
 
+    it('under way takes no change of the fields into the draft', async () => {
+        const h = await open();
+        await h.begin();
+        h.move().fieldsChanged({ ...h.move().initial, heading: 'Done' });
+        await settle();
+        const wait = gate();
+        const send = h.noteOps.send.bind(h.noteOps);
+        vi.spyOn(h.noteOps, 'send').mockImplementationOnce(async (...args) => { await wait.shut; return send(...args); });
+        h.form.write();
+        expect(await h.host.put({ content: 'During' })).toBe(false);
+        expect(h.host.task().content).toBe('Row');
+        wait.open();
+        await vi.waitFor(() => expect(h.panel.close).toHaveBeenCalled());
+        expect(h.lines()).toContain('- [ ] Row @2026-11-26');
+    });
+
     it('under way is waited for by a close; made, the hub closes', async () => {
         const h = await open();
         await h.begin();
@@ -293,12 +407,41 @@ describe('throwing the move away', () => {
         expect(h.lines()).toContain('    - [ ] Written @2026-11-26');
     });
 
+    it('takes the index\'s copy as it is now, the row written by the plugin meanwhile', async () => {
+        const h = await open();
+        await h.begin();
+        await h.host.put({ content: 'Renamed' });
+        await h.session.ops.updateTask(h.row.id, { startDate: '2026-11-27' }, { tellRefusal: false });
+        await new Promise(resolve => setTimeout(resolve, 40));
+        h.host.draft()!.discard!();
+        expect(h.host.task()).toMatchObject({ content: 'Row', startDate: '2026-11-27' });
+    });
+
     it('once the row was lost shuts the fields', async () => {
         const h = await open();
         await h.begin();
         await h.writeOutside(['# Tasks', '- [ ] Other', '']);
         h.host.draft()!.discard!();
         expect(h.host.shut()).toBe(t('modal.hub.taskMissing'));
+    });
+});
+
+describe('the hub closed', () => {
+    it('lets the move go: an answer that comes after draws nothing', async () => {
+        const h = await open();
+        await h.begin();
+        const wait = gate();
+        const facts = h.noteOps.destinationFacts.bind(h.noteOps);
+        vi.spyOn(h.noteOps, 'destinationFacts').mockImplementationOnce(async (...args) => { await wait.shut; return facts(...args); });
+        h.move().fieldsChanged({ ...h.move().initial, heading: 'Done' });
+        h.host.dispose();
+        const said = h.place.length;
+        const drawn = h.told.length;
+        wait.open();
+        await settle();
+        await settle();
+        expect(h.place.length).toBe(said);
+        expect(h.told.length).toBe(drawn);
     });
 });
 
