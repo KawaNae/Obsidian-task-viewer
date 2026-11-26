@@ -136,6 +136,23 @@ describe('[Move] while the source holds a text not taken in', () => {
         h.source.back();
         expect(h.act().disabled).toBe(true);
     });
+
+    it('drawn again as a text not taken in is typed back to what the draft holds: not pressed again, as the timers refuse the draft', async () => {
+        const h = await open();
+        await h.begin();
+        await h.toDone();
+        keepsA(h);
+        await h.source.enter();
+        h.editor().type({ children: [{ text: '- [ ] b', was: 2 }] });
+        h.source.back();
+        expect(h.act().disabled).toBe(true);
+        await h.source.enter();
+        const taken = h.editor().draft();
+        h.editor().type({ children: [{ text: '- [ ] b2', was: 1 }] });
+        expect(h.act().disabled).toBe(false);
+        h.editor().type({ children: taken.children });
+        expect(h.act().disabled).toBe(true);
+    });
 });
 
 /** A row with a property written twice: the draft refuses a change of it. */
@@ -390,5 +407,62 @@ describe('the source\'s text and the draft', () => {
         await settle();
         expect(h.move()).toBeNull();
         expect(h.state().shut).toBe(t('modal.hub.taskMissing'));
+    });
+});
+
+describe('the move thrown away', () => {
+    /** A row with a list of its own, in a section whose list it inherits. */
+    const LISTS = ['# Tasks', '- area::', '    - lab', '    - desk', '- [ ] Row @2026-11-26', '    - l::', '        - p', '# Done', ''];
+
+    /** The property row labelled `key`. */
+    const rowOf = (h: Hub, key: string) => h.root.findAll('tv-form__row').find(row => row.find('tv-form__label')?.children.some(c => c.text === key));
+
+    it('shows the index\'s row in every field that held a text it could not save, and says nothing of them', async () => {
+        const h = await open(LISTS, { rowName: 'Row' });
+        await h.begin();
+        const typeIn = (el: FocusEl, text: string) => { el.focus(); el.type(text); };
+        typeIn(h.field('start'), '明日');
+        typeIn(h.field('linestyle'), 'wavy');
+        typeIn(h.field('tags'), 'a#b');
+        const listAdd = h.field('property:l');
+        typeIn(listAdd, 'a:: b');
+        h.click(h.cancelButton());
+        await settle();
+        expect(h.ask()).toBe(t('modal.hub.move.discardAsk'));
+        h.click(h.foot.find('tv-form__discard'));
+        await settle();
+        expect(h.move()).toBeNull();
+        expect(h.field('start').value).toBe('2026-11-26');
+        expect(h.field('linestyle').value).toBe('');
+        expect(h.field('tags').value).toBe('');
+        expect(h.field('property:l').value).toBe('');
+        expect(rowSays(h)).toEqual([]);
+    });
+
+    it('on a row lost meanwhile, throws away the text of a field the lost row shuts', async () => {
+        const h = await open();
+        await h.begin();
+        const start = h.field('start');
+        start.focus();
+        start.type('明日');
+        await h.writeOutside(['# Tasks', '# Done', '- [ ] Other', '']);
+        h.click(h.cancelButton());
+        await settle();
+        h.click(h.foot.find('tv-form__discard'));
+        await settle();
+        expect(h.move()).toBeNull();
+        expect(h.state().shut).toBe(t('modal.hub.taskMissing'));
+        expect(start.value).toBe('2026-11-26');
+    });
+
+    it('lets go of an inherited list made the row\'s own and not written yet: the inherited list shows again', async () => {
+        const h = await open(LISTS, { rowName: 'Row' });
+        await h.begin();
+        h.click(rowOf(h, 'area')!.find('task-hub__make-own')!);
+        expect(rowOf(h, 'area')!.find('task-hub__make-own')).toBeNull();
+        h.click(h.cancelButton());
+        await settle();
+        expect(h.move()).toBeNull();
+        expect(rowOf(h, 'area')!.find('task-hub__make-own')).not.toBeNull();
     });
 });
