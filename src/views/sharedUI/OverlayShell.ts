@@ -67,6 +67,7 @@ import { runningAnimations, whenStopped } from '../../utils/Animations';
 import { focusField, type FieldFocus, type Focusable } from '../../utils/FieldFocus';
 import { placeFocus } from './FocusPlacement';
 import { bringIntoView } from './BodySight';
+import { holdPresses, takesTyped } from './PressCommit';
 import { t } from '../../i18n';
 
 export type OverlayMode = 'anchored' | 'centered';
@@ -130,6 +131,13 @@ export interface OverlayOpenOpts {
     takesBack?: () => boolean;
     childStack?: PopoverStack;
     hostDoc?: Document;
+    /**
+     * Whether the panel holds the presses on its buttons while a text field
+     * of it holds the focus (`holdPresses`): the button takes no focus, and
+     * what the field holds typed is committed before the button acts. The
+     * close button saves what is typed its own way (`beforeClose`).
+     */
+    holdsPresses?: boolean;
 }
 
 /** The child popovers an overlay steps back through (`PopoverStack`). */
@@ -388,6 +396,7 @@ export class OverlayShell implements ClosableOverlay {
         // Focusable by script only: the focus held when the body names no field.
         panel.tabIndex = -1;
         this.panelEl = panel;
+        if (opts.holdsPresses) holdPresses(panel);
 
         const handle = panel.createDiv({ cls: 'tv-overlay__handle' });
         this.handleEl = handle;
@@ -396,6 +405,8 @@ export class OverlayShell implements ClosableOverlay {
         setIcon(closeBtn.createSpan(), 'x');
         closeBtn.setAttribute('aria-label', t('modal.cancel'));
         closeBtn.addEventListener('click', () => { void this.requestClose(); });
+        // A close saves what is typed, or asks, by `beforeClose`.
+        takesTyped(closeBtn);
 
         const head = panel.createDiv({ cls: 'tv-overlay__head' });
         const body = panel.createDiv({ cls: 'tv-overlay__body' });

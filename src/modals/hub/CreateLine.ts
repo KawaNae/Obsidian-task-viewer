@@ -1,5 +1,6 @@
 import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
+import { showsOnly } from '../../views/sharedUI/PressCommit';
 import { IssueBoard, type FormIssue } from '../form/FormIssue';
 
 /** What the line above the create says, by where it comes from: where the task goes, and why a create was refused. */
@@ -60,6 +61,8 @@ export class CreateLine {
             this.shown = !this.shown;
             this.render();
         });
+        // It shows or hides the line, and changes no value.
+        showsOnly(button);
         this.toggle = button;
         this.render();
         return button;

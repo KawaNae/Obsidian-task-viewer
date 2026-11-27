@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TabStrip } from '../../../../src/views/sharedUI/TabStrip';
 import { FocusDoc, FocusEl, asEl } from '../../helpers/focusDom';
+import { holdPresses } from '../../../../src/views/sharedUI/PressCommit';
+import { bindField } from '../../../../src/modals/form/bindField';
 
 /**
  * A row of tabs over the panes they choose between, in a stand-in DOM
@@ -264,5 +266,26 @@ describe('TabStrip', () => {
         s.press(s.buttons[2]);
         s.key(s.buttons[2], 'Home');
         expect(s.list.scrollLeft).toBe(0);
+    });
+});
+
+describe('TabStrip in a surface that holds the presses on its buttons', () => {
+    it('chooses the tab pressed with a text that does not read typed in a field of the pane: said under the field, the text kept', () => {
+        const s = setUp();
+        holdPresses(asEl(s.root));
+        const field = s.paneEls[0].createEl('input', { type: 'text' });
+        const said: (string | null)[] = [];
+        bindField(asEl(field), {
+            codec: { read: (text: string) => (text === 'bad' ? { ok: false as const, issue: { text: 'unread' } as never } : { ok: true as const, value: text }), show: (v: string) => v },
+            current: () => '',
+            commit: () => { },
+            issues: (issue) => { said.push(issue ? 'unread' : null); },
+        });
+        field.focus();
+        field.type('bad');
+        s.buttons[1].press();
+        expect(said.at(-1)).toBe('unread');
+        expect(field.value).toBe('bad');
+        expect(marks(s)[1]).toEqual(ON);
     });
 });

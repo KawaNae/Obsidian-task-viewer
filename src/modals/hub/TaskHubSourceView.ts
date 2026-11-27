@@ -5,6 +5,7 @@ import { editorOn, type DraftEditor, type EditorOnHooks } from '../form/source/S
 import { FormActions } from '../form/FormActions';
 import { IssueBoard } from '../form/FormIssue';
 import { bringIntoView } from '../../views/sharedUI/BodySight';
+import { takesTyped } from '../../views/sharedUI/PressCommit';
 import type { SourceSurface, SourceViewState } from './TaskHubSource';
 import type { SourceSlots } from './TaskHubPanel';
 
@@ -180,5 +181,7 @@ export class TaskHubSourceView implements SourceSurface {
 function modeButton(toggle: HTMLElement, icon: string, label: string): HTMLButtonElement {
     const btn = toggle.createEl('button', { cls: 'task-hub__mode-button', attr: { type: 'button', 'aria-label': label } });
     setIcon(btn, icon);
+    // The source opens by saving what is typed in the form (`putTyped`).
+    takesTyped(btn);
     return btn;
 }

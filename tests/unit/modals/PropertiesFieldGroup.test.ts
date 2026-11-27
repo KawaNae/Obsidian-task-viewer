@@ -10,6 +10,7 @@ import { makeTask } from '../helpers/makeTask';
 import { byKey, valuesOf } from '../helpers/properties';
 import { FocusDoc, FocusEl, asEl } from '../helpers/focusDom';
 import { menuSpy } from '../helpers/menuSpy';
+import { holdPresses } from '../../../src/views/sharedUI/PressCommit';
 
 /**
  * The hub's custom properties built anew while one of their inputs holds the
@@ -64,7 +65,9 @@ function setUp(properties: Properties = {}, opts: SetUpOptions = {}) {
         locked: (field: string) => findings.some(f => f.field === field),
         issues: { set: (source: string, issues: readonly FormIssue<HubField>[]) => { said.set(source, issues); }, redraw: () => { } },
     } as unknown as FieldGroupContext;
+    // The hub's panel, which holds the presses on its buttons.
     const root = doc.root();
+    holdPresses(asEl(root));
     const group = new PropertiesFieldGroup(asEl(root), ctx);
     const addRow = () => root.find('task-hub__prop-add')!;
     const away = doc.body.createDiv();
@@ -589,5 +592,92 @@ describe('a row written from outside while the focus is in the rows', () => {
         expect([s.valueOf('n').placeholder, s.valueOf('Place').classes.has('task-hub__value--struck'), shown(s.rowOf('k')!.find('tv-form__clear-button'))])
             .toEqual(['', false, false]);
         expect([s.valueOf('n').value, s.valueOf('Place').value, s.valueOf('k').placeholder]).toEqual(['b', 'home', 'No value']);
+    });
+});
+
+describe('a button pressed while another field of the properties holds what was typed', () => {
+    const list = (...items: string[]) => ({ type: 'list', items: items.map(text) }) as const;
+    const NONE = { type: 'null', spelling: '' } as const;
+    /** The × of the item `item` of the list `key`. */
+    const itemX = (s: ReturnType<typeof setUp>, key: string, item: string) => s.rowOf(key)!.findAll('task-hub__list-item')
+        .find(one => one.find('tv-ctrl__text-input')?.value === item)!.find('tv-form__clear-button')!;
+    const itemField = (s: ReturnType<typeof setUp>, key: string, item: string) => s.rowOf(key)!.findAll('task-hub__list-item')
+        .find(one => one.find('tv-ctrl__text-input')?.value === item)!.find('tv-ctrl__text-input')!;
+
+    it('commits the item typed in the add field as its Enter does, then takes the item out, the focus kept in the add field', () => {
+        const s = setUp(byKey({ docs: list('企画書', '議事録') }));
+        s.listAdd().focus();
+        s.listAdd().type('zz');
+        itemX(s, 'docs', '議事録').press();
+        expect(s.writes.map(valuesOf)).toEqual([{ docs: list('企画書', '議事録', 'zz') }, { docs: list('企画書', 'zz') }]);
+        expect(s.listAdd().value).toBe('');
+        expect(s.doc.activeElement).toBe(s.listAdd());
+    });
+
+    it('adds the property typed in the add row, then empties the text value whose × is pressed, the focus put in the add row\'s key', () => {
+        const s = setUp(byKey({ Area: text('lab') }));
+        s.addKey().focus();
+        s.addKey().type('memo2');
+        s.rowOf('Area')!.find('tv-form__clear-button')!.press();
+        expect(s.writes.map(valuesOf)).toEqual([
+            { Area: text('lab'), memo2: NONE },
+            { Area: NONE, memo2: NONE },
+        ]);
+        expect(s.doc.activeElement).toBe(s.addKey());
+    });
+
+    it('takes out the item emptied in its field, then the item whose × is pressed at its place now', () => {
+        const s = setUp(byKey({ docs: list('a', 'b', 'c') }));
+        const a = itemField(s, 'docs', 'a');
+        a.focus();
+        a.type('');
+        itemX(s, 'docs', 'c').press();
+        expect(s.writes.map(valuesOf)).toEqual([{ docs: list('b', 'c') }, { docs: list('b') }]);
+        expect(s.doc.activeElement).toBe(s.listAdd());
+    });
+
+    it('does nothing of the button while what was typed does not read: the field keeps the focus and says why', () => {
+        const s = setUp(byKey({ docs: list('a', 'b') }));
+        s.listAdd().focus();
+        s.listAdd().type('x:: y');
+        itemX(s, 'docs', 'b').press();
+        expect(s.writes).toEqual([]);
+        expect(s.doc.activeElement).toBe(s.listAdd());
+        expect(s.listAdd().value).toBe('x:: y');
+    });
+
+    it('leaves the focus in a field in focus with nothing typed: the button acts, the field keeps the focus', () => {
+        const s = setUp(byKey({ docs: list('企画書', '議事録') }));
+        s.listAdd().focus();
+        itemX(s, 'docs', '議事録').press();
+        expect(s.writes.map(valuesOf)).toEqual([{ docs: list('企画書') }]);
+        expect(s.doc.activeElement).toBe(s.listAdd());
+    });
+
+    it('commits what the IME is converting as typed, then acts; the field built anew holds none of it, and nothing is written twice as the conversion ends', () => {
+        const s = setUp(byKey({ docs: list('企画書', '議事録') }));
+        const add = s.listAdd();
+        add.focus();
+        add.dispatchEvent(new Event('compositionstart'));
+        add.value = 'かい';
+        add.dispatchEvent(Object.assign(new Event('input', { bubbles: true }), { isComposing: true }));
+        itemX(s, 'docs', '議事録').press();
+        expect(s.writes.map(valuesOf)).toEqual([{ docs: list('企画書', '議事録', 'かい') }, { docs: list('企画書', 'かい') }]);
+        add.dispatchEvent(new Event('compositionend'));
+        expect(s.listAdd()).not.toBe(add);
+        expect([s.listAdd().value, s.doc.activeElement]).toEqual(['', s.listAdd()]);
+        s.listAdd().enter();
+        s.leave();
+        expect(s.writes).toHaveLength(2);
+    });
+
+    it('commits nothing else as a field\'s own × is pressed with the focus in it: the field emptied written once, the focus out of it', () => {
+        const s = setUp(byKey({ Area: text('lab'), docs: list('a') }));
+        const field = s.valueOf('Area');
+        field.focus();
+        field.type('typed');
+        s.rowOf('Area')!.find('tv-form__clear-button')!.press();
+        expect(s.writes.map(valuesOf)).toEqual([{ Area: NONE, docs: list('a') }]);
+        expect(s.doc.activeElement).toBe(s.doc.body);
     });
 });

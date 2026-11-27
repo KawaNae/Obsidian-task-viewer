@@ -1,7 +1,7 @@
 import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import { placeFocus } from '../../views/sharedUI/FocusPlacement';
-import { pressKey } from '../../views/sharedUI/PressCommit';
+import { ownControl, pressKey } from '../../views/sharedUI/PressCommit';
 
 /** What a {@link ClearButton} does as it is pressed. */
 export interface ClearButtonOptions {
@@ -45,6 +45,8 @@ export class ClearButton {
         this.button.tabIndex = -1;
         this.button.setAttribute('aria-label', opts.label ?? t('modal.clear'));
         if (opts.key !== undefined) pressKey(this.button, opts.key);
+        // The field's own: a surface that commits a field before a press (`holdPresses`) leaves its × to this rule.
+        ownControl(this.button, input);
         // WebKit は inline-flex 要素直下の SVG を描画しないことがあるため span 経由で挿す
         setIcon(this.button.createSpan(), 'x');
         // mousedown の既定の動きがフォーカスをボタンへ移す。止めると欄に残り、

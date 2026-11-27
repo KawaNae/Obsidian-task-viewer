@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { t } from '../../../src/i18n';
 import { ClearButton, createClearableInput } from '../../../src/modals/form/ClearButton';
 import { FakeEl, asEl, focused } from '../helpers/fakeDom';
+import { FocusDoc, asEl as asFocusEl } from '../helpers/focusDom';
+import { holdPresses, ownCommit } from '../../../src/views/sharedUI/PressCommit';
 
 /**
  * The × at the end of a form's text field (`ClearButton`): shown while the
@@ -105,6 +107,53 @@ describe('ClearButton', () => {
         b.button.press();
         expect(b.input.value).toBe('Plan');
         expect(b.cleared()).toBe(0);
+    });
+});
+
+describe('ClearButton in a surface that holds the presses on its buttons (holdPresses)', () => {
+    /** A × of a field in a surface that holds its presses, and another field beside it that commits what is typed. */
+    function inSurface(focusesField: boolean) {
+        const doc = new FocusDoc();
+        const panel = doc.root();
+        holdPresses(asFocusEl(panel));
+        const input = panel.createEl('input', { type: 'text' });
+        input.value = 'Plan';
+        const commits: string[] = [];
+        new ClearButton(asFocusEl(panel), asFocusEl(input), {
+            clear: () => { input.value = ''; commits.push('cleared'); },
+            focusesField,
+        });
+        // Both fields commit what is typed in them, as a bound field does.
+        const other = panel.createEl('input', { type: 'text' });
+        for (const [field, name] of [[input, 'own'], [other, 'other']] as const) {
+            let given = field.value;
+            ownCommit(asFocusEl(field), {
+                typed: () => field.value !== given,
+                commit: () => { commits.push(`${name} ${field.value}`); given = field.value; return true; },
+            });
+        }
+        return { doc, input, other, commits, button: panel.find('tv-form__clear-button')! };
+    }
+
+    it('is its field\'s own: with the focus in its field, typed over, it acts as out of the surface, nothing else committed first', () => {
+        for (const focusesField of [false, true]) {
+            const s = inSurface(focusesField);
+            s.other.type('x');
+            s.input.focus();
+            s.input.type('typed');
+            s.button.press();
+            expect(s.commits, String(focusesField)).toEqual(['cleared']);
+            expect(s.doc.activeElement === s.input, String(focusesField)).toBe(focusesField);
+        }
+    });
+
+    it('commits the field in focus beside it first, which keeps the focus, then empties its own', () => {
+        const s = inSurface(false);
+        s.other.focus();
+        s.other.type('x');
+        s.button.press();
+        expect(s.commits).toEqual(['other x', 'cleared']);
+        expect(s.doc.activeElement).toBe(s.other);
     });
 });
 

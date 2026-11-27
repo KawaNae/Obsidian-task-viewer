@@ -1,4 +1,5 @@
 import { t } from '../../i18n';
+import { takesTyped } from '../../views/sharedUI/PressCommit';
 
 /** A button of a form's row besides cancel: an answer, or the form's own act. */
 export interface FormAction {
@@ -163,5 +164,7 @@ function button(row: HTMLElement, label: string, tone: FormAction['tone'], run: 
     const cls = tone === 'cta' ? 'mod-cta' : tone === 'warning' ? 'mod-warning' : undefined;
     const el = row.createEl('button', { text: label, attr: { type: 'button' }, ...(cls ? { cls } : {}) });
     el.addEventListener('click', run);
+    // Each saves what is typed, or throws it away, as the form's way for it says.
+    takesTyped(el);
     return el;
 }

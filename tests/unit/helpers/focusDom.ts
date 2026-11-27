@@ -26,7 +26,12 @@
  *   blur) is not. A listener put on with a `signal` is taken off once the
  *   signal aborts; one taken off while the event is on its way is not
  *   called, as a browser does not call it. The event's `target` is the
- *   element it is sent to.
+ *   element it is sent to. `stopPropagation` lets the element it is at
+ *   finish and goes no further; `stopImmediatePropagation` stops at once.
+ * - `click()` sends a `click` that bubbles, as a script's click does, and
+ *   none to a disabled element.
+ * - An element has the tag `createEl` made it with (`tagName`); an input's
+ *   type is its `type` attribute.
  */
 type Listener = (e: Event) => void;
 interface Entry { fn: Listener; capture: boolean }
@@ -67,6 +72,8 @@ export class FocusEl {
     scrollHeight = 0;
     /** Hidden by its attribute, as the overlay's foot reads its rows. */
     hidden = false;
+    /** The element's tag, as `createEl` was given it, upper-cased as an HTML element's is. */
+    tagName = 'DIV';
 
     constructor(readonly ownerDocument: FocusDoc, cls = '') {
         cls.split(/\s+/).filter(Boolean).forEach(c => this.classes.add(c));
@@ -83,8 +90,10 @@ export class FocusEl {
         this.children.push(el);
         return el;
     }
-    createEl(_tag: string, o: { cls?: string; text?: string; type?: string; placeholder?: string; attr?: Record<string, string> } = {}): FocusEl {
+    createEl(tag: string, o: { cls?: string; text?: string; type?: string; placeholder?: string; attr?: Record<string, string> } = {}): FocusEl {
         const el = this.createDiv(o);
+        el.tagName = tag.toUpperCase();
+        if (o.type !== undefined) el.setAttribute('type', o.type);
         if (o.placeholder !== undefined) el.placeholder = o.placeholder;
         for (const [k, v] of Object.entries(o.attr ?? {})) el.setAttribute(k, v);
         return el;
@@ -229,18 +238,31 @@ export class FocusEl {
         if (e.target === null) Object.defineProperty(e, 'target', { value: this });
         const path: FocusEl[] = [];
         for (let at = this.parent; at; at = at.parent) path.unshift(at);
-        /** Call `el`'s listeners of the phase, those it still has as each is reached. */
-        const hear = (el: FocusEl, capture: boolean) => {
+        let stopped: 'here' | 'now' | null = null;
+        e.stopPropagation = () => { stopped ??= 'here'; };
+        e.stopImmediatePropagation = () => { stopped = 'now'; };
+        /** Call `el`'s listeners of the phase, those it still has as each is reached, till the event is stopped. */
+        const hear = (el: FocusEl, capture: boolean | null) => {
+            if (stopped) return;
             for (const entry of el.listeners.get(e.type) ?? []) {
-                if (entry.capture === capture && (el.listeners.get(e.type) ?? []).includes(entry)) entry.fn(e);
+                if (stopped === 'now') return;
+                if ((capture === null || entry.capture === capture) && (el.listeners.get(e.type) ?? []).includes(entry)) entry.fn(e);
             }
         };
         for (const el of path) hear(el, true);
-        for (const entry of this.listeners.get(e.type) ?? []) {
-            if ((this.listeners.get(e.type) ?? []).includes(entry)) entry.fn(e);
-        }
+        hear(this, null);
         if (e.bubbles) for (const el of [...path].reverse()) hear(el, false);
         return true;
+    }
+
+    /** Clicked by script, as `HTMLElement.click()` is: a `click` that bubbles, and none on a disabled element. */
+    click(): void {
+        if (this.disabled) return;
+        this.dispatchEvent(new Event('click', { bubbles: true }));
+    }
+
+    getAttribute(k: string): string | null {
+        return this.attrs.get(k) ?? null;
     }
 
     /** The descendants with the class `cls`, in order. */
