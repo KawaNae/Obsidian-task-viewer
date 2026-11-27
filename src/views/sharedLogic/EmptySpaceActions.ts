@@ -5,7 +5,8 @@
  *
  * Timeline's timed lane and the all-day lane offer both; they differ only
  * in whether the press knows a time, which the task to create starts at.
- * The element that opens the menu is bound in `DaySpace`.
+ * The Calendar's days offer the creates alone, on the day. The element
+ * that opens the menu is bound in `DaySpace`.
  */
 
 import type { Menu } from 'obsidian';

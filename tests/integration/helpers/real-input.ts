@@ -6,8 +6,10 @@
  * An event dispatched by script does neither. The window must have the
  * focus.
  *
- * - `press(el, { dy, holdMs })`: the left button pressed and let go on `el`,
- *   at its middle, or `dy` px below it. `el` is first scrolled into sight,
+ * - `press(el, { dx, dy, holdMs, button })`: a button pressed and let go on
+ *   `el`, at its middle, or `dx` px right of it and `dy` px below it; the
+ *   left button, or `button: 'right'`, after which the browser sends the
+ *   `contextmenu` a person's right click does. `el` is first scrolled into sight,
  *   as a person scrolls to what they press, and the point must then be on
  *   `el` or in it: a point on something else (out of a scrolled body, under
  *   a backdrop or another element over it) throws at once, nothing sent,
@@ -22,10 +24,10 @@
  *   browser's own Tab order and for Obsidian's key scopes
  */
 export const REAL_INPUT = `
-const press = (el, { dy = 0, holdMs = 0 } = {}) => {
+const press = (el, { dx = 0, dy = 0, holdMs = 0, button = 'left' } = {}) => {
     el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     const r = el.getBoundingClientRect();
-    const x = Math.round(r.left + r.width / 2);
+    const x = Math.round(r.left + r.width / 2 + dx);
     const y = Math.round(r.top + r.height / 2 + dy);
     const at = document.elementFromPoint(x, y);
     if (!el.contains(at)) {
@@ -33,8 +35,8 @@ const press = (el, { dy = 0, holdMs = 0 } = {}) => {
         throw new Error('press: the point (' + x + ', ' + y + ') is on ' + name(at) + ', not on ' + name(el));
     }
     const contents = require('electron').remote.getCurrentWebContents();
-    contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
-    const up = () => contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+    contents.sendInputEvent({ type: 'mouseDown', x, y, button, clickCount: 1 });
+    const up = () => contents.sendInputEvent({ type: 'mouseUp', x, y, button, clickCount: 1 });
     if (holdMs > 0) return new Promise(resolve => setTimeout(resolve, holdMs)).then(up);
     up();
     return Promise.resolve();
