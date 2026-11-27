@@ -53,28 +53,23 @@ export function openDraftHubInNote(plugin: PluginContext, date: string, minutes?
  * What a task created by a press on a lane starts as. `date` is the file's
  * day (the visual column). A press on the timed lane knows the time under
  * it, `minutes` after that day's midnight (the start hour's offset in): the
- * task starts then, to the nearest 5 minutes, on the next day once it is
- * past midnight. A press on the all-day lane knows no time: the task starts
- * on the day alone.
+ * task starts then, to the nearest 5 minutes (the part of a minute dropped
+ * first), on the next day once that time is midnight or past it. A press on
+ * the all-day lane knows no time: the task starts on the day alone.
  */
 function seedAt(date: string, minutes?: number): DraftSeed {
     if (minutes === undefined) return { startDate: date };
 
-    let totalMinutes = minutes;
-    if (totalMinutes >= 24 * 60) totalMinutes -= 24 * 60;
-
-    const hours = Math.floor(totalMinutes / 60);
-    let roundedMinutes = Math.round(Math.floor(totalMinutes % 60) / 5) * 5;
-    let finalHours = hours;
-    if (roundedMinutes === 60) {
-        roundedMinutes = 0;
-        finalHours += 1;
-    }
-    if (finalHours >= 24) finalHours -= 24;
+    const DAY = 24 * 60;
+    // Rounded before the day is told: a press that rounds up to midnight
+    // starts at the next day's 00:00.
+    const rounded = Math.round(Math.floor(minutes) / 5) * 5;
+    const nextDay = rounded >= DAY;
+    const inDay = nextDay ? rounded - DAY : rounded;
 
     return {
-        startDate: minutes >= 24 * 60 ? DateUtils.addDays(date, 1) : date,
-        startTime: DateUtils.formatHHMM(finalHours, roundedMinutes),
+        startDate: nextDay ? DateUtils.addDays(date, 1) : date,
+        startTime: DateUtils.formatHHMM(Math.floor(inDay / 60), inDay % 60),
     };
 }
 
