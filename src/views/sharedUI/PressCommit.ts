@@ -130,6 +130,14 @@ export function leavePresses(part: HTMLElement): void {
     leftParts.add(part);
 }
 
+/** How a surface holds its presses ({@link holdPresses}). */
+export interface PressHold {
+    /** Draw at once what a commit had the surface draw later; nothing when it is drawn. */
+    drawNow?(): void;
+    /** Held until it aborts. */
+    signal?: AbortSignal;
+}
+
 /**
  * Hold the presses on the buttons of `surface` (a `button`, or an element
  * with the role of one) while a field of it that text is typed in holds the
@@ -144,6 +152,12 @@ export function leavePresses(part: HTMLElement): void {
  *   build the button anew (a list written): the button with its key now
  *   (`pressKey`, `carryPressKeys`) is pressed in its stead, so a button acts
  *   by its own click alone, as it is drawn now.
+ * - The button is looked for once what the commit has the surface draw is
+ *   drawn: a surface that draws a change later than it is handed on (in a
+ *   microtask, which would come between this listener and the button's)
+ *   draws it at once when asked (`drawNow`). A surface that draws it only
+ *   once a write comes back leaves the button as it is drawn, on the value
+ *   handed on, until then.
  * - A field's own × (`ownControl`) and a button that takes what is typed
  *   its own way (`takesTyped`) commit nothing first.
  *
@@ -151,7 +165,8 @@ export function leavePresses(part: HTMLElement): void {
  * nothing; its buttons still take no focus. The presses of a part that
  * keeps its own (`leavePresses`) are not read.
  */
-export function holdPresses(surface: HTMLElement, signal?: AbortSignal): void {
+export function holdPresses(surface: HTMLElement, opts: PressHold = {}): void {
+    const { drawNow, signal } = opts;
     const doc = surface.ownerDocument;
     surface.addEventListener('mousedown', (e) => {
         if (pressedIn(surface, e.target) && typingIn(surface, doc.activeElement)) e.preventDefault();
@@ -163,7 +178,11 @@ export function holdPresses(surface: HTMLElement, signal?: AbortSignal): void {
         if (!button || takers.has(button) || !field || !surface.contains(field) || ownControls.get(button) === field) return;
         const owner = commitOf(field);
         if (!owner?.typed()) return;
-        const { result, key } = pressUnderWay(doc, keyOf(button) ?? null, () => owner.commit());
+        const { result, key } = pressUnderWay(doc, keyOf(button) ?? null, () => {
+            const committed = owner.commit();
+            drawNow?.();
+            return committed;
+        });
         if (!result) {
             if (!showers.has(button)) e.stopImmediatePropagation();
             return;

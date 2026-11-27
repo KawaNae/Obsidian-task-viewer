@@ -255,6 +255,14 @@ export interface PanelHost extends HubHost {
     cardRows(): TaskLookup | null;
     /** The hub has opened in `panel`: what the host follows from now on is drawn there. */
     attach(panel: HubPanel): void;
+    /**
+     * Draw at once, in the card and the form, a change handed on that the
+     * host draws later than it is taken (`DraftHost.put`); nothing when it
+     * is drawn. A button pressed with a field typed in is looked for once
+     * the field's commit is drawn (`PressHold.drawNow`). A change that is
+     * drawn once its write comes back is not drawn here.
+     */
+    drawNow(): void;
     /** The hub has closed: the host follows nothing more, and a refusal that comes after is told by a notice. */
     dispose(): void;
 }

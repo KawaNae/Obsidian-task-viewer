@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { carryPressKeys, commitOf, holdPresses, leavePresses, ownCommit, pressUnderWay, takesTyped } from '../../../src/views/sharedUI/PressCommit';
+import { carryPressKeys, commitOf, holdPresses, leavePresses, ownCommit, pressKey, pressUnderWay, takesTyped } from '../../../src/views/sharedUI/PressCommit';
 import { bindField } from '../../../src/modals/form/bindField';
 import { FocusDoc, asEl, type FocusEl } from '../helpers/focusDom';
 
@@ -101,6 +101,54 @@ describe('a surface that holds the presses on its buttons', () => {
         s.field.blur();
         expect(s.writes).toEqual(['かい', '会']);
     });
+});
+
+describe('a commit drawn later than it is handed on', () => {
+    /**
+     * A surface whose commit has a keyed button built anew in a draw put off
+     * for it, as a microtask the browser runs between two listeners of the
+     * click: the listener after the surface's runs what is put off.
+     */
+    function later() {
+        const doc = new FocusDoc();
+        const panel = doc.root();
+        let pending: (() => void) | null = null;
+        const flush = () => { const draw = pending; pending = null; draw?.(); };
+        holdPresses(asEl(panel), { drawNow: flush });
+        panel.addEventListener('click', flush, { capture: true });
+        const field = panel.createEl('input', { type: 'text' });
+        let value = 'a';
+        field.value = value;
+        const pressed: string[] = [];
+        let built = 0;
+        let button: FocusEl;
+        const build = () => {
+            button?.detach();
+            const n = ++built;
+            button = panel.createEl('button', { attr: { type: 'button' } });
+            pressKey(asEl(button), 'menu');
+            button.addEventListener('click', () => pressed.push(`built ${n} on ${value}`));
+        };
+        build();
+        bindField(asEl(field), {
+            codec: { read: (text: string) => ({ ok: true as const, value: text }), show: (v: string) => v },
+            current: () => value,
+            commit: (next: string) => { value = next; pending = build; },
+            issues: () => { },
+        });
+        return { doc, field, pressed, button: () => button };
+    }
+
+    it('looks for the button once the commit is drawn: the button built anew acts, once, and the one taken out does not', () => {
+        const s = later();
+        const first = s.button();
+        s.field.focus();
+        s.field.type('b');
+        first.press();
+        expect(s.pressed).toEqual(['built 2 on b']);
+        expect(s.doc.activeElement).toBe(s.field);
+    });
+
 });
 
 describe('the press under way and the keys of the buttons a commit builds anew', () => {

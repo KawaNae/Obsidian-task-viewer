@@ -205,6 +205,22 @@ describe('DraftHost', () => {
         expect(r.places.create).not.toHaveBeenCalled();
     });
 
+    it('draws what is put at once when asked, and the draw put off for it then draws nothing; with nothing put, draws nothing', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.told.length = 0;
+
+        r.host.drawNow();
+        expect(r.told).toEqual([]);
+        void r.host.put({ content: '電話' });
+        void r.host.put({ content: '電話 #仕事' });
+        r.host.drawNow();
+        expect(r.told).toEqual(['card', 'form']);
+        await settle();
+        expect(r.told).toEqual(['card', 'form']);
+    });
+
     it('writes the draft\'s line and property lines once, with no notice, and closes once it is written', async () => {
         const r = rig({ startDate: '2031-01-15', startTime: '10:00' });
         r.open();
