@@ -40,6 +40,7 @@ import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { MENUS } from '../helpers/menus';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
 import { DRAFT_HUB } from '../helpers/draft-hub';
+import { REAL_INPUT } from '../helpers/real-input';
 
 const [HEADING_DAY, NOTE_DAY, REFUSED_DAY, STAY_DAY, WRITTEN_DAY] = ['2031-03-03', '2031-03-04', '2031-03-05', '2031-03-06', '2031-03-07'];
 const dailyOf = (day: string) => `${day}.md`;
@@ -84,20 +85,12 @@ ${UNTIL}
 ${DIALOG_ROWS}
 ${MENUS}
 ${DRAFT_HUB}
+${REAL_INPUT}
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
 /** The hub on the daily note of \`day\`, the focus on its name and its place read. */
 const openDaily = async day => {
     plugin.openDraftHub(plugin.getCreatePlaces().dailyNote(day), { startDate: day });
     await until(() => nameInput() && document.activeElement === nameInput() && lineSays().length > 0);
-};
-/** Press \`el\` with the mouse, as a person does, through Electron. */
-const press = el => {
-    const r = el.getBoundingClientRect();
-    const x = Math.round(r.left + r.width / 2);
-    const y = Math.round(r.top + r.height / 2);
-    const contents = require('electron').remote.getCurrentWebContents();
-    contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
-    contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
 };
 /** Choose the tab \`id\` with the mouse, and wait for it to be chosen. */
 const choose = async id => {

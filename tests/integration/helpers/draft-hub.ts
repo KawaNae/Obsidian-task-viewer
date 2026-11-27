@@ -19,9 +19,6 @@
  *   above the create to say what it says of the place it now names
  * - `holdReads()`: the vault's reads held until `R.releaseReads()`, put back
  *   by `R.unhold()` (the clean-up's too)
- * - `keys(name)`: a key pressed and let go as the keyboard sends it, through
- *   Electron, for the browser's own Tab order and for Obsidian's key scopes;
- *   the window must have the focus
  */
 export const DRAFT_HUB = `
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
@@ -61,12 +58,6 @@ const holdReads = () => {
     app.vault.read = function (...args) { R.held++; return gate.then(() => real.apply(this, args)); };
     R.releaseReads = () => open();
     R.unhold = () => { app.vault.read = real; open(); delete R.unhold; delete R.releaseReads; };
-};
-const keys = name => {
-    const contents = require('electron').remote.getCurrentWebContents();
-    contents.sendInputEvent({ type: 'keyDown', keyCode: name });
-    if (name.length === 1) contents.sendInputEvent({ type: 'char', keyCode: name });
-    contents.sendInputEvent({ type: 'keyUp', keyCode: name });
 };
 /** Pick the item titled so in the menu open now (on macOS the menu may be the native one, outside the DOM). */
 const pick = async title => {

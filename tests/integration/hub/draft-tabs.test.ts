@@ -64,6 +64,7 @@ import { MENUS } from '../helpers/menus';
 import { KEYBOARD, resetKeyboard } from '../helpers/keyboard';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
 import { DRAFT_HUB } from '../helpers/draft-hub';
+import { REAL_INPUT } from '../helpers/real-input';
 
 /** Daily notes not there: each test that makes one makes it of a day of its own. */
 const DAYS = ['2031-02-03', '2031-02-04', '2031-02-05', '2031-02-06', '2031-02-07', '2031-02-08', '2031-02-09', '2031-02-10'];
@@ -134,7 +135,8 @@ ${DIALOG_ROWS}
 ${MENUS}
 ${KEYBOARD}
 ${DRAFT_HUB}
-const ask = () => { const el = formRow(draft())?.querySelector('.tv-form__ask'); return shown(el) ? el.textContent : null; };
+${REAL_INPUT}
+const ask =() => { const el = formRow(draft())?.querySelector('.tv-form__ask'); return shown(el) ? el.textContent : null; };
 const button = text => [...formRow(draft()).querySelectorAll('button')].filter(shown).find(b => b.textContent === text);
 const closeHub = () => draft().closest('.tv-overlay').querySelector('.tv-overlay__close').click();
 const nextFrame = () => new Promise(r => requestAnimationFrame(r));
