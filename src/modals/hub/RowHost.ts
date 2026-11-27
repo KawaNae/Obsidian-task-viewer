@@ -453,6 +453,13 @@ export class RowHost implements PanelHost, RowPlaceHost {
     }
 
     /**
+     * Nothing to draw at once: a change written as it comes is drawn once
+     * its write comes back from the index, and one a move's draft takes is
+     * drawn as it is taken (`MoveHost.drafted`).
+     */
+    drawNow(): void { }
+
+    /**
      * Follow the row in the index for the hub that has opened: each change of
      * it (our own writes' echoes among them) becomes the value, drawn in the
      * card and the fields, then the source is drawn again; a row the index no longer

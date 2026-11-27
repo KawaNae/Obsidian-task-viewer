@@ -320,7 +320,7 @@ export class TaskHubPanel {
             yieldsEscape: () => this.source?.yieldsEscape() ?? false,
             takesBack: () => this.source?.takesBack() ?? false,
             // A button pressed with a field typed in commits the field first, as its Enter does, and leaves it the focus.
-            holdsPresses: true,
+            holdsPresses: { drawNow: () => this.host.drawNow() },
         });
 
         this.host.attach({

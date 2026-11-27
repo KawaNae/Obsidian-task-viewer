@@ -153,7 +153,8 @@ export class DraftHost implements PanelHost {
     /**
      * Put `updates` over the draft, and draw it in the card and the fields
      * once the field handing them on is done, as a row's echo comes after its
-     * write. Taken at once; nothing is taken while a create is under way.
+     * write, or when asked before that ({@link drawNow}). Taken at once;
+     * nothing is taken while a create is under way.
      */
     put(updates: Partial<Task> | null): Promise<boolean> {
         if (this.making) return Promise.resolve(false);
@@ -166,12 +167,16 @@ export class DraftHost implements PanelHost {
     private drawSoon(): void {
         if (this.drawing) return;
         this.drawing = true;
-        queueMicrotask(() => {
-            this.drawing = false;
-            if (this.closed) return;
-            this.panel?.redrawPreview();
-            this.form?.refresh();
-        });
+        queueMicrotask(() => this.drawNow());
+    }
+
+    /** Draw what was put and is not drawn yet, at once: the draw put off for it then draws nothing. */
+    drawNow(): void {
+        if (!this.drawing) return;
+        this.drawing = false;
+        if (this.closed) return;
+        this.panel?.redrawPreview();
+        this.form?.refresh();
     }
 
     /** The whole form shut while a create is under way. */

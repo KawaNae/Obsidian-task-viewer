@@ -227,7 +227,8 @@ describe('a hub with nothing to wait for', () => {
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
         void TaskHubPanel.openDraftHub(r.app, PLACE, { content: '下書き' }, { ...r.deps, places, notePlaces });
 
-        expect(shells.map(shell => (shell.opts as { holdsPresses?: boolean } | null)?.holdsPresses)).toEqual([true, true]);
+        const holds = shells.map(shell => (shell.opts as { holdsPresses?: { drawNow?: () => void } } | null)?.holdsPresses);
+        expect(holds.map(hold => typeof hold?.drawNow)).toEqual(['function', 'function']);
     });
 
     it('on a task not written yet is open with its card drawn as the call returns', () => {
