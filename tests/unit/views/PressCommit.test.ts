@@ -62,6 +62,24 @@ describe('a surface that holds the presses on its buttons', () => {
         expect(s.doc.activeElement).toBe(s.field);
     });
 
+    it('lets a button that saves what is typed its own way act though what is typed would be refused, committing nothing first', () => {
+        const doc = new FocusDoc();
+        const panel = doc.root();
+        holdPresses(asEl(panel));
+        const field = panel.createEl('input', { type: 'text' });
+        let commits = 0;
+        ownCommit(asEl(field), { typed: () => true, commit: () => { commits++; return false; } });
+        const close = panel.createEl('button');
+        takesTyped(asEl(close));
+        const pressed: string[] = [];
+        close.addEventListener('click', () => pressed.push('close'));
+        field.focus();
+        close.press();
+        expect(pressed).toEqual(['close']);
+        expect(commits).toBe(0);
+        expect(doc.activeElement).toBe(field);
+    });
+
     it('reads no press in a part that keeps its own', () => {
         const s = surface();
         const card = s.panel.createDiv();

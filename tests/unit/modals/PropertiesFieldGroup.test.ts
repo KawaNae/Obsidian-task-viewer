@@ -502,6 +502,16 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
         expect(s.rowOf('own')).toBeUndefined();
         expect(s.doc.activeElement).toBe(s.doc.body);
     });
+
+    it('puts the focus in no field once an item of the menu is done, though another row\'s value held it as the … was pressed', () => {
+        const s = setUp(byKey({ Area: text('lab'), one: list('a') }));
+        s.valueOf('Area').focus();
+        s.rowOf('one')!.find('task-hub__prop-more')!.press();
+        expect(s.doc.activeElement).toBe(s.valueOf('Area'));
+        s.menus.last()!.items.find(item => item.title === 'Convert to text')!.click!();
+        expect(valuesOf(s.writes.at(-1)!)).toEqual({ Area: text('lab'), one: text('a') });
+        expect(s.doc.activeElement).toBe(s.doc.body);
+    });
 });
 
 describe('a row written from outside while the focus is in the rows', () => {
@@ -644,6 +654,29 @@ describe('a button pressed while another field of the properties holds what was 
         expect(s.writes).toEqual([]);
         expect(s.doc.activeElement).toBe(s.listAdd());
         expect(s.listAdd().value).toBe('x:: y');
+    });
+
+    it('does nothing of the button while the key typed in the add row is refused: the key keeps the focus and says why', () => {
+        const s = setUp(byKey({ Area: text('lab') }));
+        s.addKey().focus();
+        s.addKey().type('#x');
+        s.rowOf('Area')!.find('tv-form__clear-button')!.press();
+        expect(s.writes).toEqual([]);
+        expect(s.valueOf('Area').value).toBe('lab');
+        expect(s.doc.activeElement).toBe(s.addKey());
+        expect(s.keySays()).toEqual(['A key cannot start with a list or quote marker, #, or a code fence (~~~).']);
+    });
+
+    it('opens the menu of another row as its … is pressed over an item typed in a list\'s add field: the item added, the rows built anew, the … built anew pressed', () => {
+        const s = setUp(byKey({ Area: text('lab'), docs: list('a') }));
+        const more = s.rowOf('Area')!.find('task-hub__prop-more')!;
+        s.listAdd().focus();
+        s.listAdd().type('zz');
+        more.press();
+        expect(s.writes.map(valuesOf)).toEqual([{ Area: text('lab'), docs: list('a', 'zz') }]);
+        expect(s.rowOf('Area')!.find('task-hub__prop-more')).not.toBe(more);
+        expect(s.menus.shown.map(menu => menu.items[0].title)).toEqual(['Type: text']);
+        expect(s.doc.activeElement).toBe(s.listAdd());
     });
 
     it('leaves the focus in a field in focus with nothing typed: the button acts, the field keeps the focus', () => {
