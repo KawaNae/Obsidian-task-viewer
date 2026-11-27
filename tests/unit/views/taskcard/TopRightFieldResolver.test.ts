@@ -48,6 +48,11 @@ describe('the top right shows the dates the note states', () => {
             { start: '2026-10-04 06:00', end: '', startTime: '06:00', times: '06:00', due: '' }],
         ['@2026-10-04 inheriting the due 2026-10-10', lineTask('@2026-10-04', { due: '2026-10-10' }),
             { start: '2026-10-04', end: '', startTime: '', times: '', due: '2026-10-10' }],
+        ['@2026-10-04T10:00>>2026-10-12 under a section of tv-start:: 2026-10-01T06:00 and tv-due:: 2026-10-10',
+            lineTask('@2026-10-04T10:00>>2026-10-12', { startDate: '2026-10-01', startTime: '06:00', due: '2026-10-10' }),
+            { start: '2026-10-04 10:00', end: '', startTime: '10:00', times: '10:00', due: '2026-10-12' }],
+        ['@2026-10-04 under a section of tv-start:: 2026-10-01T06:00', lineTask('@2026-10-04', { startDate: '2026-10-01', startTime: '06:00' }),
+            { start: '2026-10-04 06:00', end: '', startTime: '06:00', times: '06:00', due: '' }],
     ];
 
     for (const [name, task, expected] of rows) {
@@ -93,6 +98,14 @@ describe('statedDates', () => {
             cascadeContext: { startDate: '2026-10-01', startTime: '06:00', due: '2026-10-10' },
         }));
         expect(stated).toEqual({ startDate: '2026-10-04', startTime: '10:00', due: '2026-10-10' });
+    });
+
+    it('takes each field apart: the line\'s date with the inherited time, and the line\'s end and due over the inherited ones', () => {
+        const stated = statedDates(makeTask({
+            startDate: '2026-10-04', endTime: '12:00', due: '2026-10-20',
+            cascadeContext: { startDate: '2026-10-01', startTime: '06:00', endDate: '2026-10-02', endTime: '07:00', due: '2026-10-10' },
+        }));
+        expect(stated).toEqual({ startDate: '2026-10-04', startTime: '06:00', endDate: '2026-10-02', endTime: '12:00', due: '2026-10-20' });
     });
 
     it('fills a field the line leaves empty with the inherited value', () => {

@@ -199,6 +199,17 @@ describe('planInPlaceCopies', () => {
         expect(copyLines(task)).toEqual(['- [ ] task @2026-03-12T01:00>03:00']);
     });
 
+    it('moves the dates the line writes, not the ones its scope gives as well', () => {
+        // The scope's values stand under the line's own: the copy is the line's span moved.
+        const task = makeTask({
+            startDate: '2026-03-11', startTime: '10:00', endTime: '11:00',
+            cascadeContext: { startDate: '2026-03-01', startTime: '06:00', endTime: '07:00' },
+            originalText: '- [ ] task @2026-03-11T10:00>11:00',
+        } as Partial<Task>);
+
+        expect(copyLines(task)).toEqual(['- [ ] task @2026-03-11T11:00>12:00']);
+    });
+
     it('shifts a task whose start time comes from scope', () => {
         // Effective, not written, is what decides: this one holds a time.
         const task = makeTask({

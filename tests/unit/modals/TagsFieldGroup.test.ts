@@ -13,9 +13,9 @@ import { FocusDoc, asEl, type FocusEl } from '../helpers/focusDom';
  * is written.
  */
 
-function setUp(tags: string[]) {
+function setUp(tags: string[], inherited: string[] = []) {
     const doc = new FocusDoc();
-    let task: Task = makeTask({ tags });
+    let task: Task = makeTask({ tags, ...(inherited.length > 0 ? { cascadeContext: { tags: inherited } } : {}) });
     const writes: string[][] = [];
     const ctx = {
         task: () => task,
@@ -42,6 +42,8 @@ function setUp(tags: string[]) {
         writes,
         add: () => root.find('task-hub__tag-add-wrap')!.find('tv-ctrl__input')!,
         chips: () => chips().map(chip => chip.children[0].text),
+        /** The tags whose chips are drawn as inherited ones. */
+        inheritedChips: () => chips().filter(chip => chip.classes.has('task-hub__tag-chip--cascade')).map(chip => chip.children[0].text),
         /** The × of the chip of `tag`. */
         removeOf: (tag: string): FocusEl => chips().find(chip => chip.children[0].text === `#${tag}`)!.find('tv-ctrl__pill-remove')!,
     };
@@ -58,5 +60,17 @@ describe('a tag\'s × pressed while the add field holds what was typed', () => {
         expect(s.chips()).toEqual(['#b', '#zz']);
         expect(s.add().value).toBe('');
         expect(s.doc.activeElement).toBe(s.add());
+    });
+});
+
+describe('a tag of its own the task inherits as well', () => {
+    it('takes out the task\'s own by its ×: the tag stays, drawn as the inherited one with no ×', () => {
+        const s = setUp(['a', 'b'], ['a']);
+        expect(s.inheritedChips()).toEqual([]);
+        s.removeOf('a').press();
+        expect(s.writes).toEqual([['b']]);
+        expect(s.chips()).toEqual(['#a', '#b']);
+        expect(s.inheritedChips()).toEqual(['#a']);
+        expect(s.removeOf('a')).toBeNull();
     });
 });

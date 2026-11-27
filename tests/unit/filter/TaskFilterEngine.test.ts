@@ -104,6 +104,15 @@ describe('TaskFilterEngine', () => {
             expect(evaluateFilter(task, stateFromCondition(cond('color', 'excludes', ['#ff0000'])))).toBe(false);
         });
 
+        it('compares the color the line says, a value or none, not the one its section gives as well', () => {
+            const own = makeTask({ color: 'red', cascadeContext: { color: 'blue' } });
+            expect(evaluateFilter(own, stateFromCondition(cond('color', 'includes', ['red'])))).toBe(true);
+            expect(evaluateFilter(own, stateFromCondition(cond('color', 'includes', ['blue'])))).toBe(false);
+            const none = makeTask({ color: null, cascadeContext: { color: 'blue' } });
+            expect(evaluateFilter(none, stateFromCondition(cond('color', 'includes', [''])))).toBe(true);
+            expect(evaluateFilter(none, stateFromCondition(cond('color', 'includes', ['blue'])))).toBe(false);
+        });
+
         it('no color set — empty string for matching', () => {
             const task = makeTask();
             const state = stateFromCondition(cond('color', 'includes', ['']));
@@ -578,6 +587,13 @@ describe('TaskFilterEngine', () => {
             expect(dt.startDate).toBeUndefined();
             const state = stateFromCondition(cond('startDate', 'equals', '2026-03-10'));
             expect(evaluateFilter(dt, state)).toBe(true);
+        });
+
+        it('compares the dates the line writes, not the ones its section gives as well', () => {
+            const dt = makeDisplayTask({ startDate: '2026-03-30', cascadeContext: { startDate: '2026-03-10', endDate: '2026-04-01' } });
+            expect(evaluateFilter(dt, stateFromCondition(cond('startDate', 'equals', '2026-03-30')))).toBe(true);
+            expect(evaluateFilter(dt, stateFromCondition(cond('startDate', 'equals', '2026-03-10')))).toBe(false);
+            expect(evaluateFilter(dt, stateFromCondition(cond('endDate', 'equals', '2026-04-01')))).toBe(true);
         });
 
         it('compares an inherited end the line does not write', () => {
