@@ -16,6 +16,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
+import { MENUS } from '../helpers/menus';
 import { tr } from '../helpers/view-helper';
 
 const TEST_FILE = 'test-int-hub-property-values.md';
@@ -38,6 +39,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
 ${DIALOG_ROWS}
+${MENUS}
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const valueInput = key => rowOf(key).querySelector('input.tv-ctrl__text-input');
@@ -155,21 +157,22 @@ describe('the hub writes a custom property back as it is spelled', () => {
         expect(readTestFile(TEST_FILE)).toBe(withLine(7, '\t- memo::'));
     });
 
-    it('writes no value at once as the × in a value\'s field is pressed, the row kept and the focus not put in the field', () => {
+    it('draws no × in a value\'s field, and takes the line out by the menu button over its end, the row gone and the focus not put in a field', () => {
         openHub('親');
         const before = run<Record<string, unknown>>(`
-            const shown = el => !!el && getComputedStyle(el).display !== 'none';
-            return JSON.stringify({ memo: shown(rowOf('memo').querySelector('.tv-form__clear-button')), e: shown(rowOf('e').querySelector('.tv-form__clear-button')) });
+            const row = rowOf('memo');
+            const more = row.querySelector('.task-hub__value-box button.tv-form__menu-button');
+            return JSON.stringify({ x: !!row.querySelector('.tv-form__clear-button'), more: !!more, label: more?.getAttribute('aria-label') });
         `);
-        // A field with no value has no ×.
-        expect(before).toEqual({ memo: true, e: false });
+        expect(before).toEqual({ x: false, more: true, label: tr('modal.hub.fieldMenu', { field: 'memo' }) });
         const after = run<Record<string, unknown>>(`
-            rowOf('memo').querySelector('.tv-form__clear-button').click();
+            rowOf('memo').querySelector('button.tv-form__menu-button').click();
+            menuItem(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.deleteKey'))});
             await sleep(600);
-            return JSON.stringify({ value: valueInput('memo').value, placeholder: valueInput('memo').placeholder, focused: document.activeElement === valueInput('memo') });
+            return JSON.stringify({ row: !!rowOf('memo'), focused: hub().contains(document.activeElement) && document.activeElement instanceof HTMLInputElement });
         `);
-        expect(readTestFile(TEST_FILE)).toBe(withLine(7, '\t- memo::'));
-        expect(after).toEqual({ value: '', placeholder: tr('modal.hub.noValue'), focused: false });
+        expect(readTestFile(TEST_FILE)).toBe(LINES.filter((_, i) => i !== 7).join('\n'));
+        expect(after).toEqual({ row: false, focused: false });
     });
 });
 

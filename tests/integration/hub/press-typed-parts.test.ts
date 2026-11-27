@@ -12,13 +12,16 @@
  * - On a task not written yet, whose host draws a commit in a microtask, run
  *   as the field's commit is done before the button is looked for: the
  *   status, a date's ×, a tab, the button that shows or hides the line
- *   above the create, a property's menu button, a value's ×, a list's
- *   item ×, the color's hide and a tag's ×. The field keeps the focus but
- *   for the tab, which takes it.
+ *   above the create, a property's menu button, a list's item ×, the
+ *   color's hide and a tag's ×. The field keeps the focus but for the tab,
+ *   which takes it.
  * - On a row, whose fields are drawn again once the note's write comes back
  *   from the index: a property's menu stays open, and a list's item × takes
  *   its item out of the list as the color's write left it.
  * - In a move, whose draft draws the commit at once: a property's menu.
+ * - A property's menu button pressed with a value typed in that property's
+ *   own field: the value is written first, and the menu offers what the
+ *   field's state after the write has.
  *
  * The name, the status and the dates are in the basic tab; the tags, the
  * style and the properties in the details tab: a field of one tab and a
@@ -76,8 +79,7 @@ const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub
 const saw = (test, ms = 3000) => until(test, ms).then(() => true, () => false);
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const valueInput = key => rowOf(key).querySelector('input.task-hub__value');
-const valueClear = key => rowOf(key).querySelector('.task-hub__value-box .tv-form__clear-button');
-const moreOf = key => rowOf(key).querySelector('.task-hub__prop-more');
+const moreOf = key => rowOf(key).querySelector('button.tv-form__menu-button');
 const items = key => [...rowOf(key).querySelectorAll('.task-hub__list-items .task-hub__list-item input')].map(i => i.value);
 const itemClear = (key, item) => [...rowOf(key).querySelectorAll('.task-hub__list-items .task-hub__list-item')]
     .find(el => el.querySelector('input')?.value === item).querySelector('.tv-form__clear-button');
@@ -341,11 +343,6 @@ describe('a button of another part pressed with a field typed in, on a task not 
         expect(out).toMatchObject({ acted: true, menus: 1, tags: ['#tg', '#zz'] });
     });
 
-    it('a tag typed, a property\'s value ×: the value made none, the tag added', () => {
-        const out = pressed('draft tag, value ×', 'tagInput()', 'zz', 'valueClear(\'note1\')', 'valueInput(\'note1\').value === \'\'', '{ tags: tagChips(), note1: valueInput(\'note1\').value }');
-        expect(out).toMatchObject({ acted: true, tags: ['#tg', '#zz'], note1: '' });
-    });
-
     it('a tag typed, a list\'s item ×: the item out, the tag added', () => {
         const out = pressed('draft tag, item ×', 'tagInput()', 'zz', 'itemClear(\'docs\', \'b\')', '!items(\'docs\').includes(\'b\')', '{ tags: tagChips(), docs: items(\'docs\') }');
         expect(out).toMatchObject({ acted: true, tags: ['#tg', '#zz'], docs: ['a'] });
@@ -385,7 +382,7 @@ describe('a button of another part pressed with a field typed in, on a row', () 
             closeMenus();
             return JSON.stringify({ acted, ...seen, focus: focusNow() });
         `);
-        expect(out).toMatchObject({ acted: true, menus: 1, tags: ['#zz'], menu: [tr('modal.hub.typeText'), tr('modal.hub.toList'), tr('modal.hub.deleteProperty')], writes: 1 });
+        expect(out).toMatchObject({ acted: true, menus: 1, tags: ['#zz'], menu: [tr('modal.hub.typeText'), tr('modal.hub.toList'), tr('modal.hub.deleteKey')], writes: 1 });
     });
 
     it('a color typed, a list\'s item ×: both written, the item out of the list as it is once the color came back', () => {
@@ -417,5 +414,34 @@ describe('a button of another part pressed with a field typed in, in a move', ()
             return JSON.stringify({ acted, ...seen, focus: focusNow() });
         `);
         expect(out).toMatchObject({ acted: true, menus: 1, tags: ['#zz'], writes: 0 });
+    });
+});
+
+describe('a property\'s menu button pressed with a value typed in its own field', () => {
+    const INHERITED = ['## Work', '- place:: home', '- [ ] 親 @2026-10-01', '- [ ] 次', ''];
+
+    beforeEach(async () => { await writeIndexedTestFile(TEST_FILE, INHERITED.join('\n')); });
+
+    it('an inherited value typed over: written as the row\'s own first, and the menu offers to clear it and follow the inherited value, not to write it', () => {
+        const out = run<Record<string, unknown>>('inherited value, …', `
+            await openRow('親', 'detail');
+            typeIn(valueInput('place'), 'zq8');
+            watch();
+            press(moreOf('place'));
+            const acted = await saw(() => R.menus > 0);
+            await saw(() => R.writes.length > 0);
+            const seen = await settled(() => ({ menu: menuTitles() }));
+            closeMenus();
+            return JSON.stringify({ acted, ...seen });
+        `);
+        const lines = [...INHERITED];
+        lines.splice(3, 0, '\t- place:: zq8');
+        expect(out).toMatchObject({
+            acted: true,
+            menus: 1,
+            menu: [tr('modal.hub.typeText'), tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.toList'), tr('modal.hub.setNoValue'), tr('modal.hub.clearToInherited')],
+            writes: 1,
+            disk: lines.join('\n'),
+        });
     });
 });

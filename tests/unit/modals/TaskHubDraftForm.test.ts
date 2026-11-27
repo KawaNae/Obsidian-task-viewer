@@ -156,7 +156,7 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
         rowOf: (key: string) => root.findAll('tv-form__row').find(row => row.find('tv-form__label')?.children.some(c => c.text === key)),
         /** Pick the item titled `title` from the menu of the property's row `row`. */
         pick: (row: FocusEl, title: string) => {
-            row.find('task-hub__prop-more')!.dispatchEvent(new Event('click'));
+            row.find('tv-form__menu-button')!.dispatchEvent(new Event('click'));
             menus.at(-1)!.find(item => item.title === title)!.pick();
         },
     };
@@ -203,7 +203,7 @@ describe('the fields of a hub on a task not written yet', () => {
     it('make an inherited value the task\'s own when it is typed again', async () => {
         const s = await setUp();
         const input = s.rowOf('owner')!.find('task-hub__value')!;
-        expect(s.rowOf('owner')!.classes.has('task-hub__row--inherited')).toBe(true);
+        expect([input.value, input.parent!.classes.has('tv-form__control--inherited')]).toEqual(['', true]);
         input.focus();
         input.type('you');
         input.enter();
@@ -213,10 +213,12 @@ describe('the fields of a hub on a task not written yet', () => {
         expect(s.places.create).not.toHaveBeenCalled();
     });
 
-    it('make an inherited list the task\'s own from its items, written to the draft by its first edit', async () => {
+    it('write an inherited list as the task\'s own from its menu at once, into the draft, then add an item to it', async () => {
         const s = await setUp();
-        s.pick(s.rowOf('area')!, 'Make it this task\'s own');
         expect(s.host.task().properties).toEqual({});
+        s.pick(s.rowOf('area')!, 'Write inherited value to this task');
+        await settle();
+        expect(valuesOf(s.host.task().properties).area).toMatchObject({ type: 'list', items: [{ text: 'lab' }, { text: 'desk' }] });
 
         const add = s.rowOf('area')!.find('task-hub__list-add')!;
         add.focus();
@@ -237,14 +239,14 @@ describe('the fields of a hub on a task not written yet', () => {
         key.enter();
         expect(Object.keys(valuesOf(s.host.task().properties))).toEqual(['memo']);
 
-        s.pick(s.rowOf('memo')!, 'Delete');
+        s.pick(s.rowOf('memo')!, 'Delete key');
         await settle();
         s.form.refresh();
         expect(s.host.task().properties).toEqual({});
         expect(s.rowOf('memo')).toBeUndefined();
     });
 
-    it('convert a property\'s text to a list of it and back from its menu, into the draft', async () => {
+    it('convert a property\'s text to a list of it and back to a single value from its menu, into the draft', async () => {
         const s = await setUp();
         const addRow = () => s.root.find('task-hub__prop-add')!;
         const key = addRow().find('tv-form__label')!.children.find(c => c.placeholder !== '')!;
@@ -256,7 +258,7 @@ describe('the fields of a hub on a task not written yet', () => {
         s.pick(s.rowOf('memo')!, 'Convert to list');
         await settle();
         expect(valuesOf(s.host.task().properties)).toEqual({ memo: { type: 'list', items: [{ type: 'text', text: 'x', spelling: 'x' }] } });
-        s.pick(s.rowOf('memo')!, 'Convert to text');
+        s.pick(s.rowOf('memo')!, 'Convert to single value');
         await settle();
         expect(valuesOf(s.host.task().properties)).toEqual({ memo: { type: 'text', text: 'x', spelling: 'x' } });
         expect(s.places.create).not.toHaveBeenCalled();

@@ -7,7 +7,7 @@ import { FocusDoc, asEl as asFocusEl } from '../helpers/focusDom';
 import { commitOf } from '../../../src/views/sharedUI/PressCommit';
 
 /** A date field bound to a value held here, as the hub holds its row. */
-function dateField(initial: string | undefined, opts: { refuse?: boolean; takesSame?: boolean } = {}) {
+function dateField(initial: string | undefined, opts: { refuse?: boolean } = {}) {
     const input = new FakeEl();
     input.value = initial ?? '';
     let value = initial;
@@ -22,7 +22,6 @@ function dateField(initial: string | undefined, opts: { refuse?: boolean; takesS
             value = v;
         },
         issues: (issue) => said.push(issue),
-        takesSame: opts.takesSame ? () => true : undefined,
     });
     return { input, field, commits, said, last: () => said[said.length - 1], setValue: (v: string | undefined) => { value = v; } };
 }
@@ -264,31 +263,12 @@ describe('bindField', () => {
         });
     });
 
-    describe('a field that shows an inherited value (takesSame)', () => {
-        it('commits the value typed again, and nothing when it is only focused and left', () => {
-            const f = dateField('2026-10-01', { takesSame: true });
-            f.input.blur();
-            expect(f.commits).toEqual([]);
-            f.input.type('2026-10-01');
-            f.input.blur();
-            expect(f.commits).toEqual(['2026-10-01']);
-        });
-
-        it('holds the value typed again as pending, so that a close saves it', () => {
-            const f = dateField('2026-10-01', { takesSame: true });
-            expect(f.field.pending()).toBeNull();
-            f.input.type('2026-10-01');
-            expect(f.field.pending()).toEqual({ ok: true, value: '2026-10-01' });
-            f.field.commit();
-            expect(f.commits).toEqual(['2026-10-01']);
-            expect(f.field.pending()).toBeNull();
-        });
-
-        it('holds nothing as pending for a field that does not take the same value', () => {
-            const f = dateField('2026-10-01');
-            f.input.type('2026-10-01');
-            expect(f.field.pending()).toBeNull();
-        });
+    it('holds nothing as pending, and commits nothing, for its value typed again', () => {
+        const f = dateField('2026-10-01');
+        f.input.type('2026-10-01');
+        expect(f.field.pending()).toBeNull();
+        f.input.blur();
+        expect(f.commits).toEqual([]);
     });
 
     it('takes its listeners off once its signal aborts: a blur or an Enter then commits nothing', () => {

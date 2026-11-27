@@ -21,11 +21,7 @@ export interface PropertyListFieldOptions {
     key: string;
     /** The field its issues are said of (`prop:<key folded>`). */
     at: HubField;
-    /**
-     * The row's own items (its list, or the draft made of the inherited
-     * one), which the field edits; or the inherited items, which it shows
-     * and does not edit.
-     */
+    /** The row's own items, which the field edits; or the inherited items, which it shows and does not edit. */
     own: boolean;
     items: readonly PropertyScalar[];
     /** The form is shut, or a finding locks the property: nothing is edited. */
@@ -43,7 +39,17 @@ export interface PropertyListFieldOptions {
      * writes nothing.
      */
     signal: AbortSignal;
+    /**
+     * Put the row's menu button (…) in `box`: the add field's box for the
+     * row's own items, over the items' fields and the add field; the chips'
+     * line (`inline`) for the inherited ones, over no field. None for a row
+     * with no menu.
+     */
+    menu?: RowMenu;
 }
+
+/** Put a row's menu button (…) in `box` (`inline` in a line of chips), its items putting the value of `fields`. */
+export type RowMenu = (box: HTMLElement, inline: boolean, fields: () => readonly HTMLElement[]) => void;
 
 /**
  * A custom property's list in the hub: an item a line, as the note writes
@@ -56,8 +62,9 @@ export interface PropertyListFieldOptions {
  * Alt+Up and Alt+Down in its text. An item is read as a line holding it
  * reads it (`PropertyItemInput`): what does not read back as that one item
  * (`null`, `[ ] x`, `a:: b`) is said under the row and not written. Every
- * edit writes the whole list (`write`); a list left with no item is
- * written as no value (`PropertiesFieldGroup`), the property's line kept.
+ * edit writes the whole list (`write`); what a list left with no item
+ * writes is the row's to say (`PropertiesFieldGroup`): emptied, a field
+ * writes what its state says.
  *
  * A write builds the rows anew, and the focus stays where it was: in the
  * add field, or in the item it was in at that item's new place (the add
@@ -65,9 +72,9 @@ export interface PropertyListFieldOptions {
  * not moved, and an item taken out by its × leaves the focus it held in no
  * field, so a tap on an item's × or handle brings up no keyboard.
  *
- * An inherited list is shown as it is, its items as chips, and
- * not edited here: its source is opened from the row's menu, and the row
- * made its own starts from a copy of its items (`PropertiesFieldGroup`).
+ * An inherited list is shown as it is, its items as chips, and not edited
+ * here: its source is opened from the row's menu, and the menu writes it as
+ * the row's own (`PropertiesFieldGroup`).
  */
 export class PropertyListField {
     readonly el: HTMLElement;
@@ -103,6 +110,7 @@ export class PropertyListField {
         for (const item of this.opts.items) {
             chips.createSpan({ cls: 'tv-ctrl__pill task-hub__list-chip task-hub__list-chip--cascade', text: item.spelling });
         }
+        this.opts.menu?.(chips, true, () => []);
     }
 
     private renderOwn(): void {
@@ -167,11 +175,13 @@ export class PropertyListField {
         // The add field stands where an item's text does: a handle's room before it.
         const addEl = this.el.createDiv({ cls: 'task-hub__list-item task-hub__list-item--add' });
         setIcon(addEl.createSpan({ cls: 'task-hub__list-handle is-placeholder' }), 'grip-vertical');
-        const add = addEl.createEl('input', {
+        const addBox = addEl.createDiv({ cls: 'task-hub__list-item-box' });
+        const add = addBox.createEl('input', {
             type: 'text',
             placeholder: t('modal.hub.addItem'),
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow task-hub__list-add',
         });
+        this.opts.menu?.(addBox, false, () => this.fields());
         add.disabled = disabled;
         this.addInput = add;
         const suggest = this.offer(add, (value) => {
@@ -308,9 +318,14 @@ export class PropertyListField {
         return focus === 'add' ? this.addInput : this.itemInputs[focus] ?? this.addInput;
     }
 
+    /** The fields of the row's own items, then the add field: none for the inherited ones. */
+    private fields(): HTMLInputElement[] {
+        return [...this.itemInputs, ...(this.addInput ? [this.addInput] : [])];
+    }
+
     /** The inputs whose text a close cannot save: an item, or an item to add, that does not read. */
     unsaved(): UnsavedField[] {
-        const inputs = [...this.itemInputs, ...(this.addInput ? [this.addInput] : [])];
+        const inputs = this.fields();
         const bound = [...this.itemBound, ...(this.addBound ? [this.addBound] : [])];
         return inputs
             .filter((_, i) => bound[i].pending()?.ok === false)

@@ -1,14 +1,17 @@
 /**
  * Hiding an inherited value in the hub, in the running E2E vault. A
- * property's row that inherits a value hides it by the × in its field,
- * which writes its own line with no value (`- key::`) at once; the row then
- * shows an empty field with the value hidden struck through, and its menu
- * takes the line out again ("Revert to inherited value"), so the value
- * above comes through. A style's row hides it by its icon, and its own no
- * value's × takes the line out. A style shows a no value a section above
- * wrote as the property fields do: an empty field that says so, with the
- * line it is written on to open. A value written above the first heading
- * is hidden so too, its source said to be the file's.
+ * property's row that inherits a value shows it as the empty field's
+ * placeholder in a dashed box, and hides it by its menu ("Set to no value"),
+ * which writes its own line with no value (`- key::`); the row then shows an
+ * empty field with the value hidden struck through, and its menu takes the
+ * line out again ("Follow inherited value"), so the value above comes
+ * through. Emptying an inherited field writes nothing, and emptying an own
+ * value over an inherited one takes the row's line out. A style's row hides
+ * its value by its icon, and its own no value's × takes the line out. A
+ * style shows a no value a section above wrote as the property fields do:
+ * an empty field that says so, with the line it is written on to open. A
+ * value written above the first heading is hidden so too, its source said
+ * to be the file's.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -53,7 +56,7 @@ const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const shown = el => !!el && getComputedStyle(el).display !== 'none';
 /** Choose the item titled \`title\` from the menu of the property's row \`key\`. */
-const pickOf = (key, title) => { rowOf(key).querySelector('.task-hub__prop-more').click(); menuItem(i => i.titleEl?.textContent === title); };
+const pickOf = (key, title) => { rowOf(key).querySelector('button.tv-form__menu-button').click(); menuItem(i => i.titleEl?.textContent === title); };
 const colorRow = () => hub().querySelector('.tv-form__input-with-picker--color').closest('.tv-form__row');
 const noteView = () => app.workspace.getLeavesOfType('markdown').map(l => l.view).find(v => v.file?.path === ${JSON.stringify(TEST_FILE)});
 `;
@@ -104,41 +107,43 @@ afterAll(async () => {
 });
 
 describe('the hub hides an inherited value', () => {
-    it('hides an inherited property by the × in its field, and then shows the row\'s no value with the value hidden struck through', () => {
+    it('shows an inherited property as the empty field\'s placeholder in a dashed box, with no ×, and hides it by its menu, then shows the row\'s no value with the value hidden struck through', () => {
         openHub('親');
         const before = run<Record<string, unknown>>(`
             const row = rowOf('area');
-            const mark = row.querySelector('.task-hub__prop-mark');
-            return JSON.stringify({
-                mark: [!!mark.querySelector('svg.lucide-link-2'), mark.getAttribute('aria-label')],
-                frame: getComputedStyle(row.querySelector('input')).borderTopStyle,
-                x: shown(row.querySelector('.tv-form__clear-button')),
-                hide: !!row.querySelector('.task-hub__hide'),
-            });
-        `);
-        expect(before).toEqual({ mark: [true, tr('modal.hub.markInherited')], frame: 'dashed', x: true, hide: false });
-        const after = run<Record<string, unknown>>(`
-            rowOf('area').querySelector('.tv-form__clear-button').click();
-            await sleep(600);
-            const row = rowOf('area');
             const input = row.querySelector('input');
-            const mark = row.querySelector('.task-hub__prop-mark');
             return JSON.stringify({
                 value: input.value,
                 placeholder: input.placeholder,
-                struck: getComputedStyle(input, '::placeholder').textDecorationLine,
-                mark: [!!mark.querySelector('svg.lucide-link-2off'), mark.getAttribute('aria-label')],
-                focused: document.activeElement === input,
+                frame: getComputedStyle(input).borderTopStyle,
+                dashed: row.querySelector('.task-hub__value-box').classList.contains('tv-form__control--inherited'),
+                x: !!row.querySelector('.tv-form__clear-button'),
+                hide: !!row.querySelector('.task-hub__hide'),
+            });
+        `);
+        expect(before).toEqual({ value: '', placeholder: 'lab', frame: 'dashed', dashed: true, x: false, hide: false });
+        run(`pickOf('area', ${JSON.stringify(tr('modal.hub.setNoValue'))}); await sleep(600); return 'ok';`);
+        const after = run<Record<string, unknown>>(`
+            const row = rowOf('area');
+            const input = row.querySelector('input');
+            const struck = row.querySelector('.tv-form__struck');
+            return JSON.stringify({
+                value: input.value,
+                placeholder: input.placeholder,
+                struck: [struck.textContent, shown(struck) && !struck.classList.contains('is-hidden')],
+                dashed: row.querySelector('.task-hub__value-box').classList.contains('tv-form__control--inherited'),
             });
         `);
         expect(readTestFile(TEST_FILE)).toBe(withLines(5, 5, '\t- area::'));
-        expect(after).toEqual({ value: '', placeholder: 'lab', struck: 'line-through', mark: [true, tr('modal.hub.markHiding')], focused: false });
+        expect(after).toEqual({ value: '', placeholder: '', struck: ['lab', true], dashed: false });
     });
 
-    it('hides an inherited property by emptying its field, as its × does', () => {
+    it('writes nothing when an inherited property\'s empty field is left as it is, and the typed value as the row\'s own when it is typed, even equal to the inherited', () => {
         openHub('親');
         run(`const input = rowOf('area').querySelector('input'); chooseTabOf(input).focus(); input.value = ''; input.dispatchEvent(new InputEvent('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('blur')); await sleep(600); return 'ok';`);
-        expect(readTestFile(TEST_FILE)).toBe(withLines(5, 5, '\t- area::'));
+        expect(readTestFile(TEST_FILE)).toBe(LINES.join('\n'));
+        run(`const input = rowOf('area').querySelector('input'); chooseTabOf(input).focus(); input.value = 'lab'; input.dispatchEvent(new InputEvent('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('blur')); await sleep(600); return 'ok';`);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(5, 5, '\t- area:: lab'));
     });
 
     it('hides an inherited color', () => {
@@ -157,21 +162,21 @@ describe('the hub hides an inherited value', () => {
         const before = run<Record<string, unknown>>(`
             const area = rowOf('area').querySelector('input');
             const mask = rowOf(${JSON.stringify(tr('modal.hub.mask'))});
-            rowOf('area').querySelector('.task-hub__prop-more').click();
+            rowOf('area').querySelector('button.tv-form__menu-button').click();
             const menu = menuTitles();
             closeMenus();
             return JSON.stringify({
-                area: [area.value, area.placeholder],
+                area: [area.value, area.placeholder, rowOf('area').querySelector('.tv-form__struck-text').textContent],
                 menu,
                 mask: [mask.querySelector('input').placeholder, shown(mask.querySelector('.task-hub__prop-remove')), shown(mask.querySelector('.task-hub__hide'))],
             });
         `);
         expect(before).toEqual({
-            area: ['', 'lab'],
-            menu: [tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.revertToInherited')],
+            area: ['', '', 'lab'],
+            menu: [tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.followInherited')],
             mask: [tr('modal.hub.noValue'), true, false],
         });
-        run(`pickOf('area', ${JSON.stringify(tr('modal.hub.revertToInherited'))}); await sleep(600); return 'ok';`);
+        run(`pickOf('area', ${JSON.stringify(tr('modal.hub.followInherited'))}); await sleep(600); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLines(6, 7));
         run(`
             const mask = rowOf(${JSON.stringify(tr('modal.hub.mask'))});
@@ -190,15 +195,15 @@ describe('the hub hides an inherited value', () => {
             const wage = rowOf('時給');
             const mask = rowOf(${JSON.stringify(tr('modal.hub.mask'))});
             return JSON.stringify({
-                wage: [wage.querySelector('input').value, shown(wage.querySelector('.tv-form__clear-button'))],
+                wage: [wage.querySelector('input').value, wage.querySelector('input').placeholder, !!wage.querySelector('.tv-form__clear-button')],
                 mask: [mask.querySelector('input[type=text]').placeholder, mask.querySelector('.task-hub__source').textContent],
             });
         `);
         expect(before).toEqual({
-            wage: ['1450', true],
+            wage: ['', '1450', false],
             mask: [tr('modal.hub.noValue'), tr('modal.hub.inheritedFromFile')],
         });
-        run(`rowOf('時給').querySelector('.tv-form__clear-button').click(); await sleep(600); return 'ok';`);
+        run(`pickOf('時給', ${JSON.stringify(tr('modal.hub.setNoValue'))}); await sleep(600); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(['- 時給:: 1450', '- tv-mask::', '', '# 見出し', '- [ ] 根の下 @2026-10-01', '\t- 時給::', ''].join('\n'));
     });
 
@@ -237,5 +242,35 @@ describe('the hub hides an inherited value', () => {
             return 'ok';
         `);
         expect(readTestFile(TEST_FILE)).toBe(withLines(13, 13, '\t- tv-mask:: ***'));
+    });
+});
+
+describe('the hub empties an own text over an inherited value', () => {
+    const OVER = ['# 見出し', '- team:: A', '- [ ] 親 @2026-10-01', '\t- team:: B', '- [ ] 次', ''];
+
+    beforeEach(async () => { await writeIndexedTestFile(TEST_FILE, OVER.join('\n')); });
+
+    it('takes the row\'s own line out of the note, and shows the inherited value as the placeholder in a dashed box', () => {
+        openHub('親');
+        run(`
+            const input = rowOf('team').querySelector('input');
+            chooseTabOf(input).focus();
+            input.value = '';
+            input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+            input.dispatchEvent(new FocusEvent('blur'));
+            await sleep(600);
+            return 'ok';
+        `);
+        expect(readTestFile(TEST_FILE)).toBe(['# 見出し', '- team:: A', '- [ ] 親 @2026-10-01', '- [ ] 次', ''].join('\n'));
+        const shown = run<Record<string, unknown>>(`
+            const row = rowOf('team');
+            const input = row.querySelector('input');
+            return JSON.stringify({
+                value: input.value,
+                placeholder: input.placeholder,
+                dashed: row.querySelector('.task-hub__value-box').classList.contains('tv-form__control--inherited'),
+            });
+        `);
+        expect(shown).toEqual({ value: '', placeholder: 'A', dashed: true });
     });
 });

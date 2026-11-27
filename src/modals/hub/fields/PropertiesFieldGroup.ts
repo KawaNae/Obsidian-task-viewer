@@ -1,4 +1,3 @@
-import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
 import type { Properties, PropertyScalar, PropertyValue } from '../../../types';
 import { PropertyKey } from '../../../services/parsing/utils/PropertyKey';
@@ -7,44 +6,46 @@ import { FilterValueCollector } from '../../../services/filter/FilterValueCollec
 import { PropertyKeyInput } from '../../../services/parsing/utils/PropertyKeyInput';
 import { PropertyValueInput, type PropertyLineValue } from '../../../services/parsing/utils/PropertyItemInput';
 import type { Read } from '../../../utils/values/Read';
-import { CascadeSource, type CascadeSourceKind } from '../CascadeSource';
+import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
-import { ClearButton } from '../../form/ClearButton';
+import { FieldMenuButton, type FieldMenu, type FieldMenuHead, type FieldMenuItem } from '../../form/FieldMenuButton';
 import { createFormRow } from '../../form/formRow';
 import { onFormEnter } from '../../form/formEnter';
 import { bindField, type BoundField, type Written } from '../../form/bindField';
-import { ownCommit, pressKey } from '../../../views/sharedUI/PressCommit';
+import { ownCommit } from '../../../views/sharedUI/PressCommit';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { ValueSuggest, type ValueSuggestOptions } from '../../../suggest/ValueSuggest';
 import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './FieldGroupContext';
-import { PropertyListField, type ListFocus } from './PropertyListField';
+import { PropertyListField, type ListFocus, type RowMenu } from './PropertyListField';
+import { FieldLookView } from './FieldLookView';
+import { FieldMenus } from './FieldMenus';
+import type { FieldAction } from './FieldState';
 import {
     PropertyRows,
+    type PropertyConversion,
     type PropertyMenu,
-    type PropertyMenuAction,
-    type PropertyMenuItem,
     type PropertyRow,
     type PropertyRowField,
-    type PropertyRowMark,
 } from './PropertyRows';
 
 /**
- * カスタムプロパティ行。どの行があり、各行が何を出すか（欄、キーの横の印、
- * … のメニューの項目）は `PropertyRows` が決め、ここはそれを描く。行は
- * 「キー、値の欄、…」で、行を消す操作と継承元の行を開く操作は … のメニューにある。
- * - own キー: value 編集可。値を空にして確定するか、欄の中の × を押すと、行を
- *   残して値のないプロパティ（`- key::`）を書く。× はすぐ書き、フォーカスを
- *   欄へ置かない。行を消すのはメニューだけである
- * - 継承しただけのキー: 破線の枠と `link-2` の印。value を編集し確定すると own
- *   上書きに昇格。空にするか × を押すと、継承した値を隠す値のないプロパティを書く。
- *   隠している行は `link-2off`（lucide の link-2-off）の印で、隠している値を欄の薄い字に打ち消し線で出す
+ * カスタムプロパティ行。どの行があり、各行の欄が何か（`PropertyRows`）、欄の
+ * 見た目と … のメニューの項目、空にしたときの書き込み（欄の状態の表、
+ * `FieldStates`）は決まった所が決め、ここはそれを描く。行は「キー、値の欄」で、
+ * … は値の欄の右端に重なる（`FieldMenuButton`）。
+ * - 自分の値: 実線の枠の字。値を空にして確定すると、上の層がキーを渡していれば
+ *   自分の行を消して継承した値を出し、渡していなければ行を残して値のない
+ *   プロパティ（`- key::`）を書く
+ * - 継承しただけのキー: 欄は空で、継承した値を破線の枠の薄い字に出す。打った値は
+ *   自分の値として書く（継承した値と同じ字でも書く）。空のまま確定しても何も書かない
+ * - 値なし: 薄い字で「値なし」。上の層の値を隠していれば、隠した値に線を引いて出す
  * - リストの値: 項目ごとの欄（`PropertyListField`）。項目の × は項目を消し、
- *   最後の項目を消すと値なしになる。継承しただけのリストはチップで出し、
- *   メニューの「このタスクの値にする」で項目を写した下書きになり、最初の確定で書く
+ *   最後の項目を消すと、値を空にしたときと同じく書く。継承しただけのリストはチップで出す
  * - 所見のあるキー: 編集できない行（`FieldGroupContext.locked`）。メニューは無い
  * - メニュー: 先頭に灰色で押せない属性の行（型、継承元）と区切り線を出す。自分の
- *   文字の値は「リストに変換する」で 1 項目のリストに、項目が 1 つの自分のリストか
- *   下書きは「文字の値に変換する」でその項目の文字の値になる。書く値は `menuOf` が返す
+ *   文字の値は「リストに変換する」で 1 項目のリストに、項目が 1 つの自分のリストは
+ *   「単一の値に変換する」でその項目の値になる。「継承した値をこのタスクに書く」は
+ *   選んだ時点で、継承した値をその綴りのまま書く
  *
  * 行はキーを大文字と小文字を区別せずに1つずつ出し（`PropertyKey`）、キーは
  * 効いている値を書いた層の綴りで出す。
@@ -63,7 +64,7 @@ import {
  * 値は、値の欄も追加行も `PropertyValueInput` で読む（前後の空白を落とし、
  * 行が読むとおりに読む）。リストの項目は `PropertyItemInput` が同じく読む。
  *
- * 行の見た目（破線の枠、キーの横の印、薄い字と打ち消し線、×）と … のメニューは、
+ * 行の見た目（破線の枠、薄い字と隠した値の線、… の有無）と … のメニューは、
  * 描く時、確定した時、メニューを開く時の行（`rowNow`）から決める。フォーカスが
  * 節の中にある間は要素を作り直さず、行の見た目だけを当て直す（`restyle`）。
  * 行の増減や欄の種類の変化は、フォーカスが節から出た時に組み直す。それまで
@@ -96,12 +97,6 @@ export class PropertiesFieldGroup implements ClosingPart {
     private built = new AbortController();
     /** Each list property's field as last built, by key folded. */
     private lists = new Map<string, PropertyListField>();
-    /**
-     * An inherited list made the row's own and not yet written, by key
-     * folded: its items, which the first edit writes. Kept across a rebuild,
-     * let go once the row has its own value.
-     */
-    private drafts = new Map<string, PropertyScalar[]>();
     /** Each row as last built, by key folded, in order: what it was built as (`shapeOf`), and how its look is put on it again. */
     private drawn = new Map<string, DrawnRow>();
     /** The rows as built no longer stand for the rows as they are, and are built anew once the focus leaves them. */
@@ -139,13 +134,7 @@ export class PropertiesFieldGroup implements ClosingPart {
         this.valueSays.clear();
         this.valueBound.clear();
 
-        const task = this.ctx.task();
         const shut = this.ctx.isShut();
-
-        // A draft goes once the row has a value of its own (written, or from outside).
-        for (const folded of [...this.drafts.keys()]) {
-            if (task.properties?.[folded] !== undefined) this.drafts.delete(folded);
-        }
 
         // The rows as the task is now. What a row shows, what its field
         // stands for and what its menu offers are read of the row as it is
@@ -167,8 +156,6 @@ export class PropertiesFieldGroup implements ClosingPart {
             type: 'text', placeholder: t('modal.hub.propertyValue'),
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
         });
-        // The room of the rows' menu button, so that the value field ends where theirs do.
-        addRow.createSpan({ cls: 'task-hub__prop-more-room' });
         keyInput.disabled = shut;
         valueInput.disabled = shut;
         this.addKeyInput = keyInput;
@@ -281,11 +268,10 @@ export class PropertiesFieldGroup implements ClosingPart {
         this.ctx.issues.redraw();
     }
 
-    /** The rows as the task, its drafts and its findings are now (`PropertyRows`). */
+    /** The rows as the task and its findings are now (`PropertyRows`). */
     private rows(): PropertyRow[] {
         return PropertyRows.of({
             task: this.ctx.task(),
-            drafts: this.drafts,
             findings: this.ctx.findings(),
             locked: (field) => this.ctx.locked(field),
         });
@@ -302,21 +288,21 @@ export class PropertiesFieldGroup implements ClosingPart {
 
     /**
      * What a row is built as: the kind of its field, whether it takes input,
-     * whether it has a menu, and a list's items. A row whose shape stays is
-     * drawn as it is now by putting its look on it again; one whose shape
-     * changes is built anew.
+     * and a list's items. A row whose shape stays is drawn as it is now by
+     * putting its look on it again (its menu button shown or hidden with
+     * it); one whose shape changes is built anew.
      */
     private shapeOf(row: PropertyRow): string {
-        const { field } = PropertyRows.formOf(row);
-        const shape: unknown[] = [field.kind, this.ctx.isShut() || row.locked, this.menuOf(row).items.length > 0];
+        const field = PropertyRows.fieldOf(row);
+        const shape: unknown[] = [field.kind, this.ctx.isShut() || row.locked];
         if (field.kind === 'list') shape.push(field.editsOwn, field.items);
         return JSON.stringify(shape);
     }
 
     /**
      * Each row's look put on it again from the row as it is now, no element
-     * built anew: its key, its mark, its frame, and its field's faint text,
-     * strike and ×, a text field given the value as {@link BoundField.set}
+     * built anew: its key, its frame, its field's faint text and its menu
+     * button, a text field given the value as {@link BoundField.set}
      * gives it (what is typed in it kept). A row added, gone, or now of
      * another shape is left as it is, its field writing nothing
      * (`writeField`), and the rows are built anew once the focus leaves them.
@@ -333,122 +319,111 @@ export class PropertiesFieldGroup implements ClosingPart {
     }
 
     /**
-     * A property's row, drawn as `PropertyRows` says it is: the key (and its
-     * mark), the field, and the button of the row's menu at its end.
+     * A property's row, drawn as `PropertyRows` says it is: the key, and the
+     * field, with the button of the row's menu over its end.
      */
     private renderRow(prop: PropertyRow): void {
         const { folded, key } = prop;
-        const { field } = PropertyRows.formOf(prop);
+        const field = PropertyRows.fieldOf(prop);
         const shut = this.ctx.isShut();
         const disabled = shut || prop.locked;
 
-        // An own list stands an item a line: its key and its menu button keep to the first.
+        // An own list stands an item a line: its key keeps to the first.
         const ownList = field.kind === 'list' && field.editsOwn;
         const { row, labelEl, says } = createFormRow(this.sectionEl, '', ownList ? { alignStart: true } : undefined);
         labelEl.addClass('task-hub__prop-label');
         const keyEl = labelEl.createSpan({ cls: 'task-hub__prop-key' });
-        let markEl: HTMLElement | null = null;
         if (field.kind === 'list') row.addClass('task-hub__row--list');
         if (prop.locked) row.addClass('task-hub__row--locked');
         this.valueSays.set(folded, says);
 
-        let restyleField = (_field: PropertyRowField) => { /* a list's or a blank field's look is its shape's */ };
-        if (field.kind === 'text') restyleField = this.textField(row, folded, key, field, disabled);
-        else if (field.kind === 'list') this.listField(row, folded, key, field, disabled);
+        const buttons: FieldMenuButton[] = [];
+        /** The row's menu button, put in `box` (`inline` in a line of chips), over the row's `fields`. */
+        const menu: RowMenu = (box, inline, fields) => { buttons.push(this.menuButton(box, folded, key, inline, fields)); };
+        let restyleField = (_now: PropertyRow) => { /* a list's or a blank field's look is its shape's */ };
+        if (field.kind === 'text') restyleField = this.textField(row, folded, key, disabled, menu);
+        else if (field.kind === 'list') this.listField(row, folded, key, field, disabled, menu);
         else {
             const valueInput = row.createEl('input', { type: 'text', cls: `${VALUE_INPUT_CLS} tv-form__control` });
             valueInput.disabled = true;
             this.valueInputs.set(folded, valueInput);
         }
 
-        if (this.menuOf(prop).items.length > 0) this.menuButton(row, folded, key, shut);
-        // A row with no menu keeps the button's room, so that its field ends where the others' do.
-        else row.createSpan({ cls: 'task-hub__prop-more-room' });
-
         const restyle = (now: PropertyRow) => {
-            const form = PropertyRows.formOf(now);
             keyEl.setText(now.key);
-            markEl?.detach();
-            markEl = null;
-            if (form.mark) {
-                const [icon, label] = MARKS[form.mark];
-                markEl = labelEl.createSpan({ cls: `task-hub__prop-mark task-hub__prop-mark--${form.mark}`, attr: { 'aria-label': t(label) } });
-                setIcon(markEl, icon);
-            }
-            row.toggleClass('task-hub__row--inherited', form.inheritedLook);
-            restyleField(form.field);
+            restyleField(now);
+            for (const button of buttons) button.sync();
         };
         restyle(prop);
         this.drawn.set(folded, { shape: this.shapeOf(prop), restyle });
     }
 
     /**
-     * The row's menu button (…), which shows its menu under it as the hub's
-     * other menus are shown (`menuPresenter`): the attributes' lines greyed,
-     * as the card's menu shows a line that only tells, a separator, then
-     * the items. The menu is the row's as it is when the button is pressed
-     * (`rowNow`). An item done builds the rows anew, and puts the focus in no
-     * field: a tap brings up no keyboard.
+     * The row's menu button (…) in `box`, which shows the row's menu under
+     * it as the hub's other menus are shown (`menuPresenter`): the
+     * attributes' lines greyed, as the card's menu shows a line that only
+     * tells, a separator, then the items. The menu is the row's as it is
+     * when the button is pressed (`rowNow`), what is typed in the field
+     * written first. An item done builds the rows anew, and puts the focus
+     * in no field: a tap brings up no keyboard.
      */
-    private menuButton(row: HTMLElement, folded: string, key: string, shut: boolean): void {
-        const button = row.createEl('button', {
-            cls: 'tv-icon-btn task-hub__prop-more',
-            attr: { type: 'button', 'aria-label': t('modal.hub.propertyMenu', { key }) },
+    private menuButton(box: HTMLElement, folded: string, key: string, inline: boolean, fields: () => readonly HTMLElement[]): FieldMenuButton {
+        return new FieldMenuButton(box, {
+            label: t('modal.hub.fieldMenu', { field: key }),
+            key: `${propField(key)}:menu`,
+            fields,
+            menu: () => {
+                const prop = this.rowNow(folded);
+                return prop ? this.drawnMenu(prop) : { heads: [], items: [] };
+            },
+            presenter: this.ctx.plugin.menuPresenter,
+            disabled: () => this.ctx.isShut(),
+            inline,
+            signal: this.built.signal,
         });
-        setIcon(button.createSpan(), 'more-horizontal');
-        pressKey(button, `${propField(key)}:menu`);
-        button.disabled = shut;
-        button.addEventListener('click', () => {
-            if (this.ctx.isShut()) return;
-            const prop = this.rowNow(folded);
-            if (!prop) return;
-            const { attributes, items } = this.menuOf(prop);
-            if (items.length === 0) return;
-            this.ctx.plugin.menuPresenter.present((menu) => {
-                for (const attribute of attributes) {
-                    const [title, icon] = attribute.kind === 'type' ? TYPE_LINES[attribute.type] : SOURCE_LINES[attribute.source];
-                    menu.addItem(item => item.setTitle(t(title)).setIcon(icon).setDisabled(true));
-                }
-                if (attributes.length > 0) menu.addSeparator();
-                for (const entry of items) {
-                    const [title, icon] = MENU_ITEMS[entry.action];
-                    menu.addItem((item) => {
-                        item.setTitle(t(title)).setIcon(icon).setDisabled(entry.disabled);
-                        if (!entry.disabled) item.onClick(() => this.runMenu(prop, entry));
-                    });
-                }
-            }, { kind: 'belowRect', rect: button.getBoundingClientRect() });
-        }, { signal: this.built.signal });
+    }
+
+    /** The row's menu as its button draws it. */
+    private drawnMenu(prop: PropertyRow): FieldMenu {
+        const { type, menu } = this.menuOf(prop);
+        const heads: FieldMenuHead[] = [];
+        if (type) {
+            const [title, icon] = TYPE_LINES[type];
+            heads.push({ title: t(title), icon });
+        }
+        if (menu.source) heads.push(FieldMenus.head(menu.source));
+        const items = menu.items.map((entry): FieldMenuItem => {
+            const run = () => this.runMenu(prop, entry);
+            if ('writes' in entry) {
+                const [title, icon] = CONVERSION_LINES[entry.action];
+                return { title: t(title), icon, run };
+            }
+            return FieldMenus.item(entry, run);
+        });
+        return { heads, items };
     }
 
     /** Do what the menu item `entry` of the row `prop` does. */
-    private runMenu(prop: PropertyRow, entry: PropertyMenuItem): void {
+    private runMenu(prop: PropertyRow, entry: FieldAction | PropertyConversion): void {
         if (this.ctx.isShut()) return;
-        const { folded, key, own, inherited } = prop;
+        const { key, state } = prop;
         switch (entry.action) {
             case 'openSource':
                 this.ctx.openSource?.(copy => CascadeSource.lineOfProperty(copy, key));
                 return;
             case 'toList':
-            case 'toText':
-                // A draft converted is written as the value, and so let go.
-                this.drafts.delete(folded);
+            case 'toSingleValue':
                 void this.setValue(key, entry.writes);
                 break;
-            case 'makeOwn':
-                if (inherited.kind === 'value' && inherited.value.type === 'list') this.drafts.set(folded, [...inherited.value.items]);
+            case 'writeInherited':
+                // Written as the layer above spells it: `"123"` stays a text.
+                if (state.inherited.kind === 'value') void this.setValue(key, state.inherited.value);
                 break;
             case 'noValue':
-                this.drafts.delete(folded);
                 void this.setValue(key, NO_VALUE);
                 break;
-            case 'remove':
+            case 'dropOwn':
                 void this.remove(key);
-                break;
-            case 'revert':
-                // A draft is not written yet: it is thrown away, and the inherited list shows again.
-                if (own.kind === 'draft') this.drafts.delete(folded);
-                else void this.remove(key);
                 break;
         }
         this.render(true);
@@ -456,42 +431,39 @@ export class PropertiesFieldGroup implements ClosingPart {
 
     /**
      * The field of a property whose value is one text (a value, or no
-     * value): its own value edited in place, or the inherited one shown,
-     * which typed again is made the row's own. The × in its end empties it
-     * and writes no value at once (`- key::`), the row kept: over an
-     * inherited value, it hides it.
+     * value): the row's own value edited in place. A row with none of its
+     * own has the field empty, what it is given shown faintly
+     * (`PropertyRows.lookOf`), and what is typed is written as the row's
+     * own.
      *
-     * @returns how the field's look is put on it again from the row's field as it is now
+     * @returns how the field's look is put on it again from the row as it is now
      */
-    private textField(row: HTMLElement, folded: string, key: string, field: PropertyRowField & { kind: 'text' }, disabled: boolean): (now: PropertyRowField) => void {
+    private textField(row: HTMLElement, folded: string, key: string, disabled: boolean, menu: RowMenu): (now: PropertyRow) => void {
         const box = row.createDiv({ cls: 'tv-form__control task-hub__value-box' });
         const valueInput = box.createEl('input', { type: 'text', cls: VALUE_INPUT_CLS });
-        valueInput.value = PropertyValueInput.show(lineValueOf(field.shown));
         valueInput.disabled = disabled;
         this.valueInputs.set(folded, valueInput);
+        const look = new FieldLookView(box, valueInput);
 
-        /** The row's field as it is now: what the text stands for, and whether it edits the row's own value. */
-        const fieldNow = () => {
+        /** The row's own value as it is now: what the field stands for. */
+        const ownNow = () => {
             const now = this.rowNow(folded);
-            return now ? PropertyRows.formOf(now).field : null;
+            return now ? valueOf(PropertyRows.fieldOf(now)) : undefined;
         };
+        // The field is given its text before it is bound: what it holds then is what it was given.
+        valueInput.value = PropertyValueInput.show(lineValueOf(ownNow()));
         const suggest = this.offer(valueInput, {
             candidates: (q) => this.candidates(key).filter(v => !q || v.toLowerCase().includes(q.toLowerCase())),
-            // A value picked is one typed: the inherited value picked is made the row's own.
             pick: (val) => { valueInput.value = val; valueInput.dispatchEvent(new Event('input')); value.commit(); },
         });
-        // The value the row shows, as a line spells it: its own, or the
-        // inherited one. Left as it is, no own value is made; typed again,
-        // the inherited value is written as the row's own (`takesSame`).
-        // What is typed reads as a line reads it (`PropertyValueInput`);
-        // nothing typed is no value (`- key::`), the row kept: over an
-        // inherited value, it hides it. Once written, the row is drawn as it
-        // is now, the field kept with the focus.
+        // What is typed reads as a line reads it (`PropertyValueInput`); the
+        // field emptied writes what the row's state says (`writeField`). Once
+        // written, the row is drawn as it is now, the field kept with the focus.
         const value = bindField(valueInput, {
             codec: PropertyValueInput,
-            current: () => lineValueOf(shownOf(fieldNow())),
-            // An own line keeps its key as written; an inherited value made
-            // the task's own is written under the key it was inherited by.
+            current: () => lineValueOf(ownNow()),
+            // An own line keeps its key as written; a value of a key the row
+            // inherits is written under the key it is inherited by.
             commit: (typed) => {
                 const written = this.writeField(folded, typed);
                 if (written === false) return false;
@@ -500,40 +472,23 @@ export class PropertiesFieldGroup implements ClosingPart {
             },
             issues: () => { /* any text is a value */ },
             takesEnter: () => suggest.listShown,
-            takesSame: () => {
-                const now = fieldNow();
-                return now !== null && now.kind !== 'blank' && !now.editsOwn;
-            },
             signal: this.built.signal,
         });
         this.valueBound.set(folded, value);
-        // As a date's × does: the field emptied is written at once, and the focus is not put in it.
-        const clear = disabled ? null : new ClearButton(box, valueInput, {
-            clear: () => {
-                valueInput.value = '';
-                valueInput.dispatchEvent(new Event('input'));
-                value.commit();
-            },
-            focusesField: false,
-            key: `${propField(key)}:clear`,
-        });
+        if (!disabled) menu(box, false, () => [valueInput]);
 
         return (now) => {
-            // No value (`- key::`): the field is empty, and says so, or shows the value it hides struck through.
-            valueInput.placeholder = now.kind === 'text' ? now.placeholder : '';
-            valueInput.toggleClass('task-hub__value--struck', now.kind === 'text' && now.struck);
-            value.set(lineValueOf(shownOf(now)));
-            clear?.sync();
+            value.set(lineValueOf(valueOf(PropertyRows.fieldOf(now))));
+            look.show(PropertyRows.lookOf(now));
         };
     }
 
     /**
-     * The field of a property whose value is a list: the row's own items (its
-     * list, or a draft made of the inherited ones, written by its first
-     * edit) edited item by item, or the inherited items shown
+     * The field of a property whose value is a list: the row's own items
+     * edited item by item, or the inherited items shown
      * (`PropertyListField`).
      */
-    private listField(row: HTMLElement, folded: string, key: string, field: PropertyRowField & { kind: 'list' }, disabled: boolean): void {
+    private listField(row: HTMLElement, folded: string, key: string, field: PropertyRowField & { kind: 'list' }, disabled: boolean, menu: RowMenu): void {
         this.lists.set(folded, new PropertyListField(row, {
             app: this.ctx.app,
             key,
@@ -545,6 +500,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             write: (next, focus) => this.writeList(folded, next, focus),
             say: (source, issues) => this.ctx.issues.set(source, issues),
             signal: this.built.signal,
+            menu: disabled ? undefined : menu,
         }));
     }
 
@@ -555,9 +511,8 @@ export class PropertiesFieldGroup implements ClosingPart {
 
     /**
      * Write `items` as the row's own list of the property `folded` (none is
-     * no value, the line kept and its items' lines taken out: over an
-     * inherited value, it hides it), the draft written so let go, and build
-     * the rows anew with the focus at `focus` in the list. With the focus in
+     * the field emptied: `writeField`), and build the rows anew with the
+     * focus at `focus` in the list. With the focus in
      * a field of the rows out of the list (another row's value, another
      * list, the add row), as a press on the list's item × leaves it, that
      * field built anew takes it back, its caret where it was: the on-screen
@@ -566,7 +521,6 @@ export class PropertiesFieldGroup implements ClosingPart {
      */
     private writeList(folded: string, items: PropertyScalar[], focus?: ListFocus): void {
         if (this.writeField(folded, items.length === 0 ? NO_VALUE : { type: 'list', items }) === false) return;
-        this.drafts.delete(folded);
         const after = focus !== undefined
             ? () => this.lists.get(folded)?.focusTarget(focus)?.focus()
             : this.focusBack(folded);
@@ -609,7 +563,12 @@ export class PropertiesFieldGroup implements ClosingPart {
     /**
      * Write `value` from the field of the row `folded`, under the key the row
      * has now: what each value field and each list writes through, from a
-     * commit, a ×, or a close's save. A field built for the row as it no
+     * commit, an item's ×, or a close's save. A no value spelled as
+     * nothing is the field emptied (or the list's last item taken out),
+     * which writes what the row's state says (`PropertyRows.emptiedOf`): the
+     * row's own line taken out where a layer above gives its key, else no
+     * value written, the key kept; nothing for a row with no value of its
+     * own. A field built for the row as it no
      * longer is writes nothing (`false`), typed over or not: its row gone,
      * or now of another shape (`shapeOf`), as a write from outside makes it
      * while the focus is in the rows and they are not built anew. Its text
@@ -620,7 +579,13 @@ export class PropertiesFieldGroup implements ClosingPart {
     private writeField(folded: string, value: PropertyValue): Promise<Written> | undefined | false {
         const now = this.rowNow(folded);
         if (!now || this.drawn.get(folded)?.shape !== this.shapeOf(now)) return false;
-        return this.setValue(now.key, value);
+        // A no value typed (`null`, `~`) is written as typed.
+        if (value.type !== 'null' || value.spelling !== '') return this.setValue(now.key, value);
+        switch (PropertyRows.emptiedOf(now)) {
+            case 'dropOwn': return this.remove(now.key);
+            case 'noValue': return this.setValue(now.key, NO_VALUE);
+            case 'nothing': return undefined;
+        }
     }
 
     /** A list of values under `input`, closed when the rows are built anew. */
@@ -681,15 +646,13 @@ export class PropertiesFieldGroup implements ClosingPart {
 
     /**
      * Throw away all that is typed, read or not: the values' fields and the
-     * lists' show the values again, the add row is emptied, and an inherited
-     * list made the row's own and not written yet is let go. The rows are
+     * lists' show the values again, and the add row is emptied. The rows are
      * built anew from the value.
      */
     discardTyped(): void {
         for (const bound of this.valueBound.values()) bound.discard();
         for (const list of this.lists.values()) list.discardTyped();
         this.draft = { key: '', value: '' };
-        this.drafts.clear();
         this.ctx.issues.set('propKey', []);
         this.render(true);
     }
@@ -738,22 +701,10 @@ export class PropertiesFieldGroup implements ClosingPart {
 
 const VALUE_INPUT_CLS = 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow task-hub__value';
 
-/** The mark beside a row's key: its icon, and what it is called. */
-const MARKS: Record<PropertyRowMark, readonly [icon: string, label: string]> = {
-    inherited: ['link-2', 'modal.hub.markInherited'],
-    // Lucide's link-2-off, which Obsidian's icons name `link-2off`: `link-2-off` draws nothing there.
-    hiding: ['link-2off', 'modal.hub.markHiding'],
-};
-
-/** An item of a row's menu: its title, and its icon. */
-const MENU_ITEMS: Record<PropertyMenuAction, readonly [title: string, icon: string]> = {
-    openSource: ['modal.hub.openInheritedLine', 'external-link'],
+/** A conversion of a row's menu: its title, and its icon. */
+const CONVERSION_LINES: Record<PropertyConversion['action'], readonly [title: string, icon: string]> = {
     toList: ['modal.hub.toList', 'list'],
-    toText: ['modal.hub.toText', 'type'],
-    makeOwn: ['modal.hub.makeOwn', 'copy'],
-    noValue: ['modal.hub.setNoValue', 'ban'],
-    remove: ['modal.hub.deleteProperty', 'trash'],
-    revert: ['modal.hub.revertToInherited', 'undo-2'],
+    toSingleValue: ['modal.hub.toSingleValue', 'type'],
 };
 
 /** A menu's line of the type of the value a row shows: its title, and its icon, as the card's menu marks a property's type. */
@@ -762,12 +713,6 @@ const TYPE_LINES: Record<Exclude<PropertyValue['type'], 'null'>, readonly [title
     number: ['modal.hub.typeNumber', 'hash'],
     boolean: ['modal.hub.typeBoolean', 'toggle-left'],
     list: ['modal.hub.typeList', 'list'],
-};
-
-/** A menu's line of where a row's inherited value is written: its title, and its icon. */
-const SOURCE_LINES: Record<CascadeSourceKind, readonly [title: string, icon: string]> = {
-    section: ['modal.hub.fromSection', 'heading'],
-    file: ['modal.hub.fromFile', 'file-text'],
 };
 
 /** The field of the property `key`'s row, as its issues are said of it. */
@@ -791,10 +736,9 @@ function lineValueOf(value: PropertyValue | undefined): PropertyLineValue {
     return { type: 'text', text, spelling: text };
 }
 
-/** The value a row's field shows: a text's, a list's items; none for a blank field, or no row. */
-function shownOf(field: PropertyRowField | null): PropertyValue | undefined {
-    if (field === null || field.kind === 'blank') return undefined;
-    return field.kind === 'text' ? field.shown : { type: 'list', items: [...field.items] };
+/** The row's own value a text field stands for: none for a list's field, or a blank one. */
+function valueOf(field: PropertyRowField): PropertyValue | undefined {
+    return field.kind === 'text' ? field.value : undefined;
 }
 
 /** A row as built: what it was built as (`shapeOf`), and how its look is put on it again from the row as it is now. */
