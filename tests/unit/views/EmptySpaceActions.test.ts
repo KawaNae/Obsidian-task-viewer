@@ -63,6 +63,18 @@ describe('openDraftHubForDailyNote', () => {
         expect(opened('2026-08-22', 24 * 60 + 2 * 60 + 30)).toEqual([[DAILY, { startDate: '2026-08-23', startTime: '02:30' }]]);
     });
 
+    it.each([
+        ['23:57', 23 * 60 + 57, { startDate: '2026-08-22', startTime: '23:55' }],
+        ['23:58', 23 * 60 + 58, { startDate: '2026-08-23', startTime: '00:00' }],
+        ['23:59:30', 23 * 60 + 59.5, { startDate: '2026-08-23', startTime: '00:00' }],
+        ['24:00', 24 * 60, { startDate: '2026-08-23', startTime: '00:00' }],
+        ['28:58, a start hour of 5', 28 * 60 + 58, { startDate: '2026-08-23', startTime: '05:00' }],
+    ])('starts a press at %s on the day the time rounded to 5 minutes falls on', (_at, minutes, seed) => {
+        // The day follows the time once rounded: a press that rounds up to
+        // midnight starts the task at the next day's 00:00, not this day's.
+        expect(opened('2026-08-22', minutes)).toEqual([[DAILY, seed]]);
+    });
+
     it('starts the task on the day alone from the all-day lane, which knows no time', () => {
         expect(opened('2026-08-22')).toEqual([[DAILY, { startDate: '2026-08-22' }]]);
     });
