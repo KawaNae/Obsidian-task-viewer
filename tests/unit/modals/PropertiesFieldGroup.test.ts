@@ -89,12 +89,12 @@ function setUp(properties: Properties = {}, opts: SetUpOptions = {}) {
         valueOf: (key: string) => rowOf(key)!.find('task-hub__value')!,
         /** The items of the menu of the row labelled `key`, as its … shows them. */
         menuOf: (key: string) => {
-            rowOf(key)!.find('task-hub__prop-more')!.dispatchEvent(new Event('click'));
+            rowOf(key)!.find('tv-form__menu-button')!.dispatchEvent(new Event('click'));
             return menus.last()!.items;
         },
         /** Pick the item titled `title` from the menu of the row labelled `key`. */
         pick: (key: string, title: string) => {
-            rowOf(key)!.find('task-hub__prop-more')!.dispatchEvent(new Event('click'));
+            rowOf(key)!.find('tv-form__menu-button')!.dispatchEvent(new Event('click'));
             menus.last()!.items.find(item => item.title === title)!.click!();
         },
         /** What the add row's key says wrong. */
@@ -210,16 +210,6 @@ describe('the add row takes only a key no row stands for', () => {
         expect(s.writes).toEqual([]);
     });
 
-    it('refuses the key of an inherited list made the row\'s own and not written yet', () => {
-        const s = setUp({}, { inherited: byKey({ tags2: { type: 'list', items: [text('a')] } }) });
-        s.pick('tags2', 'Make it this task\'s own');
-        s.addKey().focus();
-        s.addKey().type('Tags2');
-        s.addKey().enter();
-        expect(s.writes).toEqual([]);
-        expect(s.keySays()).toEqual(['The key tags2 already exists, so it cannot be added.']);
-    });
-
     it('refuses a key starting as a list item, a # or a code fence does, and a reserved key naming the field that edits it', () => {
         const s = setUp();
         for (const [typed, says] of [
@@ -265,12 +255,14 @@ describe('a property\'s value field reads what is typed with the space around it
     });
 });
 
-describe('a property\'s value emptied keeps its row: no value is written', () => {
+describe('a property\'s value emptied writes what its row\'s state says', () => {
     const NONE = { type: 'null', spelling: '' } as const;
     /** The × of the first item of a list that is the row's own. */
     const firstItemX = (s: ReturnType<typeof setUp>) => s.root.findAll('task-hub__list-item').find(item => !item.classes.has('task-hub__list-item--add'))!.find('tv-form__clear-button')!;
+    /** Whether the box of the value field of the row `key` is drawn dashed, as what it is given. */
+    const dashed = (s: ReturnType<typeof setUp>, key: string) => s.valueOf(key).parent!.classes.has('tv-form__control--inherited');
 
-    it('writes no value for an own value emptied, the row standing with no value', () => {
+    it('writes no value for an own value emptied with nothing inherited, the row standing with no value', () => {
         const s = setUp(byKey({ Area: text('lab') }));
         s.valueOf('Area').focus();
         s.valueOf('Area').type('  ');
@@ -279,7 +271,7 @@ describe('a property\'s value emptied keeps its row: no value is written', () =>
         expect(s.valueOf('Area').value).toBe('');
     });
 
-    it('writes no value for the last item of an own list taken out, the row standing', () => {
+    it('writes no value for the last item of an own list taken out with nothing inherited, the row standing', () => {
         const s = setUp(byKey({ tags2: { type: 'list', items: [text('a')] } }));
         firstItemX(s).dispatchEvent(new Event('click'));
         expect(s.writes.map(valuesOf)).toEqual([{ tags2: NONE }]);
@@ -299,19 +291,51 @@ describe('a property\'s value emptied keeps its row: no value is written', () =>
         }
     });
 
-    it('writes no value over an inherited value emptied, which it hides', () => {
+    it('takes the own line out for an own value over an inherited value emptied: the field is empty, the inherited value its faint text in a dashed box', () => {
+        const s = setUp(byKey({ Place: text('mine') }), { inherited: byKey({ Place: text('home') }) });
+        expect([s.valueOf('Place').value, s.valueOf('Place').placeholder, dashed(s, 'Place')]).toEqual(['mine', 'home', false]);
+        s.valueOf('Place').focus();
+        s.valueOf('Place').type('');
+        s.leave();
+        expect(s.writes.map(valuesOf)).toEqual([{}]);
+        expect([s.valueOf('Place').value, s.valueOf('Place').placeholder, dashed(s, 'Place')]).toEqual(['', 'home', true]);
+    });
+
+    it('takes the own line out for an own value emptied where the layer above gives no value, the field then saying no value in a dashed box', () => {
+        const s = setUp(byKey({ Place: text('mine') }), { inherited: byKey({ Place: NONE }) });
+        s.valueOf('Place').focus();
+        s.valueOf('Place').type('');
+        s.leave();
+        expect(s.writes.map(valuesOf)).toEqual([{}]);
+        expect([s.valueOf('Place').value, s.valueOf('Place').placeholder, dashed(s, 'Place')]).toEqual(['', 'No value', true]);
+    });
+
+    it('writes nothing for an inherited-only value emptied and committed: it has no value of its own to empty', () => {
         const s = setUp({}, { inherited: byKey({ Place: text('home') }) });
         s.valueOf('Place').focus();
         s.valueOf('Place').type('');
         s.leave();
-        expect(s.writes.map(valuesOf)).toEqual([{ Place: NONE }]);
+        s.valueOf('Place').focus();
+        s.valueOf('Place').type('   ');
+        s.valueOf('Place').enter();
+        expect(s.writes).toEqual([]);
+        expect([s.valueOf('Place').value, s.valueOf('Place').placeholder, dashed(s, 'Place')]).toEqual(['', 'home', true]);
     });
 
-    it('writes no value for an inherited list made the row\'s own and emptied, which it hides', () => {
-        const s = setUp({}, { inherited: byKey({ tags2: { type: 'list', items: [text('a')] } }) });
-        s.pick('tags2', 'Make it this task\'s own');
+    it('writes the value typed into an inherited-only field as the row\'s own, though it is the inherited one', () => {
+        const s = setUp({}, { inherited: byKey({ Place: text('home') }) });
+        s.valueOf('Place').focus();
+        s.valueOf('Place').type('home');
+        s.leave();
+        expect(s.writes.map(valuesOf)).toEqual([{ Place: text('home') }]);
+        expect([s.valueOf('Place').value, dashed(s, 'Place')]).toEqual(['home', false]);
+    });
+
+    it('takes the own line out for the last item of an own list over an inherited list taken out, the inherited list then shown as chips', () => {
+        const s = setUp(byKey({ tags2: { type: 'list', items: [text('b')] } }), { inherited: byKey({ tags2: { type: 'list', items: [text('a')] } }) });
         firstItemX(s).dispatchEvent(new Event('click'));
-        expect(s.writes.map(valuesOf)).toEqual([{ tags2: NONE }]);
+        expect(s.writes.map(valuesOf)).toEqual([{}]);
+        expect(s.rowOf('tags2')!.findAll('task-hub__list-chip--cascade')).toHaveLength(1);
     });
 
     it('writes nothing for a field touched and left as it was: an own value, an inherited one, no value', () => {
@@ -324,45 +348,28 @@ describe('a property\'s value emptied keeps its row: no value is written', () =>
     });
 });
 
-describe('a property\'s row: the key and its mark, the field with its ×, and the menu button', () => {
+describe('a property\'s row: the key, the field, and the menu button over the field\'s end', () => {
     const NONE = { type: 'null', spelling: '' } as const;
     const list = (...items: string[]) => ({ type: 'list', items: items.map(text) }) as const;
-    const xOf = (s: ReturnType<typeof setUp>, key: string) => s.rowOf(key)!.find('tv-form__clear-button');
+    const buttonOf = (s: ReturnType<typeof setUp>, key: string) => s.rowOf(key)!.find('tv-form__menu-button');
     const shown = (el: FocusEl | null) => el !== null && el.style.display !== 'none';
-    const markOf = (s: ReturnType<typeof setUp>, key: string) => {
-        const mark = s.rowOf(key)!.find('task-hub__prop-mark');
-        return mark && [...mark.classes].find(c => c.startsWith('task-hub__prop-mark--')) + ' ' + mark.attrs.get('aria-label');
-    };
+    const dashed = (s: ReturnType<typeof setUp>, key: string) => s.valueOf(key).parent!.classes.has('tv-form__control--inherited');
+    const struckOf = (s: ReturnType<typeof setUp>, key: string) => s.valueOf(key).parent!.find('tv-form__struck-text')?.text ?? null;
 
-    it('writes no value at once as the × in an own text\'s field is pressed, the focus not put in the field, and the row kept', () => {
-        const s = setUp(byKey({ Area: text('lab') }));
-        expect(shown(xOf(s, 'Area'))).toBe(true);
-        xOf(s, 'Area')!.dispatchEvent(new Event('click'));
-        expect(s.writes.map(valuesOf)).toEqual([{ Area: NONE }]);
-        expect(s.doc.activeElement).not.toBe(s.valueOf('Area'));
-        expect(s.valueOf('Area').value).toBe('');
-        expect(s.valueOf('Area').placeholder).toBe('No value');
-        // An empty field has no ×.
-        expect(shown(xOf(s, 'Area'))).toBe(false);
+    it('draws no × in a text value\'s field, nor a column at the row\'s end, nor a mark beside the key', () => {
+        const s = setUp(byKey({ Area: text('lab') }), { inherited: byKey({ Place: text('home') }) });
+        for (const key of ['Area', 'Place']) {
+            expect(s.rowOf(key)!.find('tv-form__clear-button'), key).toBeNull();
+            expect(s.rowOf(key)!.find('task-hub__prop-more'), key).toBeNull();
+            expect(s.rowOf(key)!.find('task-hub__prop-mark'), key).toBeNull();
+        }
     });
 
-    it('writes no value once as the × is pressed over a value typed: what was typed is not written, and the focus leaves the field', () => {
-        const s = setUp(byKey({ Area: text('lab') }));
-        const field = s.valueOf('Area');
-        field.focus();
-        field.type('typed');
-        xOf(s, 'Area')!.press();
-        expect(s.writes.map(valuesOf)).toEqual([{ Area: NONE }]);
-        expect(s.doc.activeElement).not.toBe(field);
-        expect([field.value, field.placeholder]).toEqual(['', 'No value']);
-    });
-
-    it('opens no field of a row a finding locks, an inherited text shown in it: the field takes no input, with no ×', () => {
+    it('opens no field of a row a finding locks, an inherited text shown in it: the field takes no input, with no menu button', () => {
         const findings: HubFinding[] = [{ kind: 'duplicate-key', field: 'prop:dup', tone: 'error', text: 'twice', key: 'dup', line: 1 }];
         const s = setUp({}, { inherited: byKey({ dup: text('s') }), findings });
-        expect([s.valueOf('dup').value, s.valueOf('dup').disabled]).toEqual(['s', true]);
-        expect(xOf(s, 'dup')).toBeNull();
-        expect(s.rowOf('dup')!.find('task-hub__prop-more')).toBeNull();
+        expect([s.valueOf('dup').value, s.valueOf('dup').placeholder, s.valueOf('dup').disabled]).toEqual(['', 's', true]);
+        expect(buttonOf(s, 'dup')).toBeNull();
     });
 
     it('draws a row written from outside as it is now while the focus is in another, which keeps what is typed; a row added is built once the focus leaves', async () => {
@@ -373,7 +380,7 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
         s.outside(byKey({ m: text('1'), k: text('o'), n: text('x') }));
         expect(s.valueOf('m')).toBe(field);
         expect([s.doc.activeElement, field.value]).toEqual([field, '2']);
-        expect([markOf(s, 'k'), s.rowOf('k')!.classes.has('task-hub__row--inherited'), s.valueOf('k').value]).toEqual([null, false, 'o']);
+        expect([s.valueOf('k').value, s.valueOf('k').placeholder, dashed(s, 'k')]).toEqual(['o', 's', false]);
         expect(s.rowOf('n')).toBeUndefined();
         s.leave();
         await Promise.resolve();
@@ -381,51 +388,46 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
         expect(valuesOf(s.writes.at(-1)!)).toEqual({ m: { type: 'number', number: 2, spelling: '2' }, k: text('o'), n: text('x') });
     });
 
-    it('hides an inherited text with no value as the × in its field is pressed, the value hidden shown struck through', () => {
-        const s = setUp({}, { inherited: byKey({ Place: text('home') }) });
-        expect(markOf(s, 'Place')).toBe('task-hub__prop-mark--inherited Inherited value');
-        expect(s.rowOf('Place')!.classes.has('task-hub__row--inherited')).toBe(true);
-        xOf(s, 'Place')!.dispatchEvent(new Event('click'));
-        expect(s.writes.map(valuesOf)).toEqual([{ Place: NONE }]);
-        expect(markOf(s, 'Place')).toBe('task-hub__prop-mark--hiding Hiding the inherited value');
+    it('shows an inherited text in a dashed box as the faint text of an empty field, and an own value in a solid one', () => {
+        const s = setUp(byKey({ Area: text('lab') }), { inherited: byKey({ Place: text('home') }) });
+        expect([s.valueOf('Place').value, s.valueOf('Place').placeholder, dashed(s, 'Place')]).toEqual(['', 'home', true]);
         expect(s.rowOf('Place')!.classes.has('task-hub__row--inherited')).toBe(false);
-        expect(s.valueOf('Place').placeholder).toBe('home');
-        expect(s.valueOf('Place').classes.has('task-hub__value--struck')).toBe(true);
+        expect([s.valueOf('Area').value, s.valueOf('Area').placeholder, dashed(s, 'Area')]).toEqual(['lab', 'No value', false]);
     });
 
-    it('marks and fills each no value as what it hides says: the list\'s items joined, an inherited no value as no value, nothing inherited with no mark', () => {
-        const s = setUp(byKey({ crew: NONE, gone: NONE, empty: NONE }), { inherited: byKey({ crew: list('a', 'b'), gone: NONE }) });
-        expect([s.valueOf('crew').placeholder, s.valueOf('crew').classes.has('task-hub__value--struck'), markOf(s, 'crew')])
-            .toEqual(['a, b', true, 'task-hub__prop-mark--hiding Hiding the inherited value']);
-        expect([s.valueOf('gone').placeholder, s.valueOf('gone').classes.has('task-hub__value--struck'), markOf(s, 'gone')])
-            .toEqual(['No value', false, 'task-hub__prop-mark--hiding Hiding the inherited value']);
-        expect([s.valueOf('empty').placeholder, s.valueOf('empty').classes.has('task-hub__value--struck'), markOf(s, 'empty')])
-            .toEqual(['No value', false, null]);
+    it('draws a value hidden by the row\'s own no value as a struck span in the box, the placeholder the same value drawn clear; a no value hiding nothing as the faint text', () => {
+        const s = setUp(byKey({ Place: NONE, crew: NONE, gone: NONE, empty: NONE }), { inherited: byKey({ Place: text('home'), crew: list('a', 'b'), gone: NONE }) });
+        expect([s.valueOf('Place').placeholder, struckOf(s, 'Place'), dashed(s, 'Place')]).toEqual(['home', 'home', false]);
+        expect([s.valueOf('crew').placeholder, struckOf(s, 'crew')]).toEqual(['a, b', 'a, b']);
+        expect([s.valueOf('gone').placeholder, struckOf(s, 'gone'), dashed(s, 'gone')]).toEqual(['No value', null, false]);
+        expect([s.valueOf('empty').placeholder, struckOf(s, 'empty')]).toEqual(['No value', null]);
     });
 
-    it('draws a menu button on each row but a locked one, which keeps its room; an item\'s × in each item of an own list', () => {
+    it('draws the menu button over the end of the value field\'s box, and in the add field\'s box of an own list or at the end of the chips of an inherited one; none on a locked row', () => {
         const findings: HubFinding[] = [{ kind: 'duplicate-key', field: 'prop:dup', tone: 'error', text: 'twice', key: 'dup', line: 1 }];
         const s = setUp(byKey({ Area: text('lab'), tags2: list('a', 'b') }), { inherited: byKey({ crew: list('x') }), findings });
         for (const key of ['Area', 'tags2', 'crew']) {
-            const more = s.rowOf(key)!.find('task-hub__prop-more')!;
-            expect(more.attrs.get('aria-label'), key).toBe(`Menu of ${key}`);
-            expect(more.disabled, key).toBe(false);
+            const button = buttonOf(s, key)!;
+            expect(button.attrs.get('aria-label'), key).toBe(`Menu of ${key}`);
+            expect(button.disabled, key).toBe(false);
+            expect(shown(button), key).toBe(true);
         }
-        expect(s.rowOf('dup')!.find('task-hub__prop-more')).toBeNull();
-        expect(s.rowOf('dup')!.find('task-hub__prop-more-room')).not.toBeNull();
-        expect(s.rowOf('dup')!.find('tv-form__clear-button')).toBeNull();
+        expect(buttonOf(s, 'Area')!.parent!.classes.has('task-hub__value-box')).toBe(true);
+        expect(buttonOf(s, 'tags2')!.parent!.classes.has('task-hub__list-item-box')).toBe(true);
+        expect(buttonOf(s, 'tags2')!.parent!.find('task-hub__list-add')).not.toBeNull();
+        expect(buttonOf(s, 'crew')!.classes.has('tv-form__menu-button--inline')).toBe(true);
+        expect(buttonOf(s, 'Area')!.classes.has('tv-form__menu-button--inline')).toBe(false);
+        expect(buttonOf(s, 'dup')).toBeNull();
         expect(s.rowOf('tags2')!.findAll('tv-form__clear-button').map(x => x.attrs.get('aria-label'))).toEqual(['Remove item a', 'Remove item b']);
         // The inherited list is shown as chips, with no ×.
         expect(s.rowOf('crew')!.findAll('task-hub__list-chip--cascade')).toHaveLength(1);
         expect(s.rowOf('crew')!.find('tv-form__clear-button')).toBeNull();
-        expect(markOf(s, 'crew')).toBe('task-hub__prop-mark--inherited Inherited value');
     });
 
-    it('takes no press on the menu button, and draws no ×, while the hub shuts the fields', () => {
+    it('draws no menu button while the hub shuts the fields, and no ×', () => {
         const s = setUp(byKey({ Area: text('lab'), tags2: list('a') }), { shut: true });
-        expect(s.rowOf('Area')!.find('task-hub__prop-more')!.disabled).toBe(true);
+        expect(s.root.findAll('tv-form__menu-button')).toEqual([]);
         expect(s.root.findAll('tv-form__clear-button')).toEqual([]);
-        s.rowOf('Area')!.find('task-hub__prop-more')!.dispatchEvent(new Event('click'));
         expect(s.menus.shown).toEqual([]);
     });
 
@@ -436,7 +438,7 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
             ['Type: list', 'list', true],
             ['Inherited from section', 'heading', true],
             ['Open inherited line', 'external-link', true],
-            ['Make it this task\'s own', 'copy', false],
+            ['Write inherited value to this task', 'copy', false],
             ['Set to no value', 'ban', false],
         ]);
         expect(s.menus.last()!.separatorsAt).toEqual([2]);
@@ -452,26 +454,19 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
             ['Type: boolean', 'toggle-left', true],
             ['Type: text', 'type', true],
         ]);
-        expect(s.menuOf('empty').map(item => item.title)).toEqual(['Delete']);
+        expect(s.menuOf('empty').map(item => item.title)).toEqual(['Delete key']);
         expect(s.menus.last()!.separatorsAt).toEqual([]);
     });
 
-    it('converts a text to a list of it and a list of one item to its text, the rows built anew with the focus put in no field', () => {
-        const s = setUp(byKey({ Area: text('lab'), one: list('a') }), { inherited: byKey({ crew: list('x') }) });
+    it('converts a text to a list of it and a list of one item to its single value, the rows built anew with the focus put in no field', () => {
+        const s = setUp(byKey({ Area: text('lab'), one: list('a') }));
         s.pick('Area', 'Convert to list');
         expect(valuesOf(s.writes.at(-1)!)).toEqual({ Area: list('lab'), one: list('a') });
         expect(s.rowOf('Area')!.findAll('task-hub__list-item').length).toBeGreaterThan(0);
-        s.pick('one', 'Convert to text');
+        s.pick('one', 'Convert to single value');
         expect(valuesOf(s.writes.at(-1)!)).toEqual({ Area: list('lab'), one: text('a') });
         expect(s.valueOf('one').value).toBe('a');
-        expect(s.doc.activeElement).toBe(s.doc.body);
-
-        // A draft of the inherited list converted: the text written, the draft let go.
-        s.pick('crew', 'Make it this task\'s own');
-        s.pick('crew', 'Convert to text');
-        expect(valuesOf(s.writes.at(-1)!)).toEqual({ Area: list('lab'), one: text('a'), crew: text('x') });
-        expect(s.valueOf('crew').value).toBe('x');
-        expect(s.menuOf('crew').map(item => item.title)).toContain('Convert to list');
+        expect(s.menuOf('one').map(item => item.title)).toContain('Convert to list');
         expect(s.doc.activeElement).toBe(s.doc.body);
     });
 
@@ -479,36 +474,53 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
         const s = setUp(byKey({ Area: text('lab'), own: list('a') }), { inherited: byKey({ crew: list('x'), Area: text('top') }) });
         s.pick('crew', 'Open inherited line');
         expect(s.opened).toHaveLength(1);
-
-        s.pick('crew', 'Make it this task\'s own');
         expect(s.writes).toEqual([]);
-        expect(s.rowOf('crew')!.find('task-hub__list-add')).not.toBeNull();
-        expect(s.doc.activeElement).toBe(s.doc.body);
-        // The draft thrown away: nothing written, the inherited list shown again.
-        s.pick('crew', 'Revert to inherited value');
-        expect(s.writes).toEqual([]);
-        expect(s.rowOf('crew')!.findAll('task-hub__list-chip--cascade')).toHaveLength(1);
 
         s.pick('crew', 'Set to no value');
-        s.pick('own', 'Set to no value');
-        s.pick('Area', 'Revert to inherited value');
+        s.pick('Area', 'Set to no value');
+        s.pick('crew', 'Follow inherited value');
+        s.pick('Area', 'Follow inherited value');
         expect(s.writes.map(valuesOf)).toEqual([
             { Area: text('lab'), own: list('a'), crew: NONE },
-            { Area: text('lab'), own: NONE, crew: NONE },
-            { own: NONE, crew: NONE },
+            { Area: NONE, own: list('a'), crew: NONE },
+            { Area: NONE, own: list('a') },
+            { own: list('a') },
         ]);
-        s.pick('own', 'Delete');
-        expect(valuesOf(s.writes.at(-1)!)).toEqual({ crew: NONE });
+        expect(s.doc.activeElement).toBe(s.doc.body);
+        s.pick('own', 'Delete key');
+        expect(valuesOf(s.writes.at(-1)!)).toEqual({});
         expect(s.rowOf('own')).toBeUndefined();
         expect(s.doc.activeElement).toBe(s.doc.body);
+    });
+
+    it('takes an own value over an inherited one out from its menu, and writes an inherited value as the row\'s own, its list too', () => {
+        const s = setUp(byKey({ Area: text('lab') }), { inherited: byKey({ Area: text('top'), crew: list('x', 'y') }) });
+        s.pick('crew', 'Write inherited value to this task');
+        expect(valuesOf(s.writes.at(-1)!)).toEqual({ Area: text('lab'), crew: list('x', 'y') });
+        expect(s.rowOf('crew')!.find('task-hub__list-add')).not.toBeNull();
+        s.pick('Area', 'Clear and follow inherited value');
+        expect(valuesOf(s.writes.at(-1)!)).toEqual({ crew: list('x', 'y') });
+        expect([s.valueOf('Area').value, s.valueOf('Area').placeholder]).toEqual(['', 'top']);
+    });
+
+    it('writes an inherited text at once as the layer above spells it: a text spelled with quotes stays a text', () => {
+        const quoted: PropertyScalar = { type: 'text', text: '123', spelling: '"123"' };
+        const s = setUp({}, { inherited: byKey({ code: quoted }) });
+        expect(s.menuOf('code').map(item => item.title)).toEqual(['Type: text', 'Inherited from section', 'Open inherited line', 'Write inherited value to this task', 'Set to no value']);
+        s.pick('code', 'Write inherited value to this task');
+        expect(s.writes).toHaveLength(1);
+        expect(s.writes[0].code.value).toEqual({ type: 'text', text: '123', spelling: '"123"' });
+        expect([s.valueOf('code').value, s.valueOf('code').placeholder]).toEqual(['"123"', '"123"']);
+        // Nothing of the menu left to write: the value is the row's own now.
+        expect(s.menuOf('code').map(item => item.title)).not.toContain('Write inherited value to this task');
     });
 
     it('puts the focus in no field once an item of the menu is done, though another row\'s value held it as the … was pressed', () => {
         const s = setUp(byKey({ Area: text('lab'), one: list('a') }));
         s.valueOf('Area').focus();
-        s.rowOf('one')!.find('task-hub__prop-more')!.press();
+        buttonOf(s, 'one')!.press();
         expect(s.doc.activeElement).toBe(s.valueOf('Area'));
-        s.menus.last()!.items.find(item => item.title === 'Convert to text')!.click!();
+        s.menus.last()!.items.find(item => item.title === 'Convert to single value')!.click!();
         expect(valuesOf(s.writes.at(-1)!)).toEqual({ Area: text('lab'), one: text('a') });
         expect(s.doc.activeElement).toBe(s.doc.body);
     });
@@ -549,13 +561,12 @@ describe('a row written from outside while the focus is in the rows', () => {
         expect(s.writes).toHaveLength(1);
     });
 
-    it.each(CHANGES)('writes nothing from the field of a row %s: touched and left, typed over and left, its × pressed, or the focus kept as the hub closes', (_name, next) => {
-        for (const then of ['touched', 'typed', 'x', 'close']) {
+    it.each(CHANGES)('writes nothing from the field of a row %s: touched and left, typed over and left, or the focus kept as the hub closes', (_name, next) => {
+        for (const then of ['touched', 'typed', 'close']) {
             const s = focusedInM();
             const field = s.valueOf('k');
             s.outside(next);
             if (then === 'close') s.group.save();
-            else if (then === 'x') s.rowOf('k')?.find('tv-form__clear-button')?.press();
             else {
                 field.focus();
                 if (then === 'typed') field.type('b');
@@ -591,17 +602,18 @@ describe('a row written from outside while the focus is in the rows', () => {
         expect(s.writes.slice(1).map(valuesOf)).toEqual([{ k: text('a'), m: text('y') }]);
     });
 
-    it('puts each field\'s faint text, strike and × on it again as the rows written from outside are now', () => {
+    it('puts each field\'s faint text, struck value and dashed box on it again as the rows written from outside are now', () => {
         const s = setUp(byKey({ k: text('a'), n: NONE, Place: NONE, m: text('x') }), { inherited: byKey({ Place: text('home') }) });
+        const box = (key: string) => s.valueOf(key).parent!;
         s.valueOf('m').focus();
-        expect([s.valueOf('n').placeholder, s.valueOf('Place').classes.has('task-hub__value--struck'), shown(s.rowOf('k')!.find('tv-form__clear-button'))])
-            .toEqual(['No value', true, true]);
+        expect([s.valueOf('n').placeholder, box('Place').find('tv-form__struck-text')?.text, box('Place').classes.has('tv-form__control--inherited')])
+            .toEqual(['No value', 'home', false]);
         s.outside(byKey({ k: NONE, n: text('b'), m: text('x') }));
         expect(s.valueOf('m')).toBe(s.doc.activeElement);
-        // A value has no faint text; the inherited value no longer hidden is not struck through; no value has no ×.
-        expect([s.valueOf('n').placeholder, s.valueOf('Place').classes.has('task-hub__value--struck'), shown(s.rowOf('k')!.find('tv-form__clear-button'))])
-            .toEqual(['', false, false]);
-        expect([s.valueOf('n').value, s.valueOf('Place').value, s.valueOf('k').placeholder]).toEqual(['b', 'home', 'No value']);
+        // A value has the faint text of what emptying it shows; the inherited value no longer hidden is the faint text of the empty field in a dashed box, not struck through.
+        expect([s.valueOf('n').placeholder, box('Place').find('tv-form__struck-text'), box('Place').classes.has('tv-form__control--inherited')])
+            .toEqual(['No value', null, true]);
+        expect([s.valueOf('n').value, s.valueOf('Place').value, s.valueOf('Place').placeholder, s.valueOf('k').placeholder]).toEqual(['b', '', 'home', 'No value']);
     });
 });
 
@@ -624,15 +636,13 @@ describe('a button pressed while another field of the properties holds what was 
         expect(s.doc.activeElement).toBe(s.listAdd());
     });
 
-    it('adds the property typed in the add row, then empties the text value whose × is pressed, the focus put in the add row\'s key', () => {
+    it('adds the property typed in the add row, then opens the menu of the row whose … is pressed, the focus put in the add row\'s key', () => {
         const s = setUp(byKey({ Area: text('lab') }));
         s.addKey().focus();
         s.addKey().type('memo2');
-        s.rowOf('Area')!.find('tv-form__clear-button')!.press();
-        expect(s.writes.map(valuesOf)).toEqual([
-            { Area: text('lab'), memo2: NONE },
-            { Area: NONE, memo2: NONE },
-        ]);
+        s.rowOf('Area')!.find('tv-form__menu-button')!.press();
+        expect(s.writes.map(valuesOf)).toEqual([{ Area: text('lab'), memo2: NONE }]);
+        expect(s.menus.shown.map(menu => menu.items[0].title)).toEqual(['Type: text']);
         expect(s.doc.activeElement).toBe(s.addKey());
     });
 
@@ -660,8 +670,9 @@ describe('a button pressed while another field of the properties holds what was 
         const s = setUp(byKey({ Area: text('lab') }));
         s.addKey().focus();
         s.addKey().type('#x');
-        s.rowOf('Area')!.find('tv-form__clear-button')!.press();
+        s.rowOf('Area')!.find('tv-form__menu-button')!.press();
         expect(s.writes).toEqual([]);
+        expect(s.menus.shown).toEqual([]);
         expect(s.valueOf('Area').value).toBe('lab');
         expect(s.doc.activeElement).toBe(s.addKey());
         expect(s.keySays()).toEqual(['A key cannot start with a list or quote marker, #, or a code fence (~~~).']);
@@ -669,12 +680,12 @@ describe('a button pressed while another field of the properties holds what was 
 
     it('opens the menu of another row as its … is pressed over an item typed in a list\'s add field: the item added, the rows built anew, the … built anew pressed', () => {
         const s = setUp(byKey({ Area: text('lab'), docs: list('a') }));
-        const more = s.rowOf('Area')!.find('task-hub__prop-more')!;
+        const more = s.rowOf('Area')!.find('tv-form__menu-button')!;
         s.listAdd().focus();
         s.listAdd().type('zz');
         more.press();
         expect(s.writes.map(valuesOf)).toEqual([{ Area: text('lab'), docs: list('a', 'zz') }]);
-        expect(s.rowOf('Area')!.find('task-hub__prop-more')).not.toBe(more);
+        expect(s.rowOf('Area')!.find('tv-form__menu-button')).not.toBe(more);
         expect(s.menus.shown.map(menu => menu.items[0].title)).toEqual(['Type: text']);
         expect(s.doc.activeElement).toBe(s.listAdd());
     });
@@ -748,13 +759,15 @@ describe('a button pressed while another field of the properties holds what was 
         expect(s.doc.activeElement).toBe(name);
     });
 
-    it('commits nothing else as a field\'s own × is pressed with the focus in it: the field emptied written once, the focus out of it', () => {
+    it('commits the value typed in a field as its own … is pressed, written once, then opens the menu of the value written', () => {
         const s = setUp(byKey({ Area: text('lab'), docs: list('a') }));
         const field = s.valueOf('Area');
         field.focus();
         field.type('typed');
-        s.rowOf('Area')!.find('tv-form__clear-button')!.press();
-        expect(s.writes.map(valuesOf)).toEqual([{ Area: NONE, docs: list('a') }]);
-        expect(s.doc.activeElement).toBe(s.doc.body);
+        s.rowOf('Area')!.find('tv-form__menu-button')!.press();
+        expect(s.writes.map(valuesOf)).toEqual([{ Area: text('typed'), docs: list('a') }]);
+        expect(s.menus.shown).toHaveLength(1);
+        expect(s.valueOf('Area').value).toBe('typed');
     });
+
 });

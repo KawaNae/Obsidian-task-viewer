@@ -397,10 +397,11 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
                 color: { placeholder: colorInput().placeholder, from: colorInput().closest('.tv-form__row').querySelector('.task-hub__source').textContent },
                 property: {
                     value: propRow.querySelector('input.tv-ctrl__text-input')?.value ?? null,
-                    mark: !!propRow.querySelector('.task-hub__prop-mark--inherited'),
+                    placeholder: propRow.querySelector('input.tv-ctrl__text-input')?.placeholder ?? null,
+                    dashed: !!propRow.querySelector('.task-hub__value-box.tv-form__control--inherited'),
                     // No line to open: the menu's item is greyed, not left out.
                     open: (() => {
-                        propRow.querySelector('.task-hub__prop-more').click();
+                        propRow.querySelector('button.tv-form__menu-button').click();
                         const item = menuItems().find(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.openInheritedLine'))});
                         const greyed = item ? !!item.disabled : null;
                         closeMenus();
@@ -438,8 +439,8 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
             titles: [tr('modal.newTask.title')],
         });
         expect(steps.color).toEqual({ placeholder: 'red', from: section });
-        // The inherited value is shown in the field, as a row's inherited property is.
-        expect(steps.property).toEqual({ value: 'lab', mark: true, open: { greyed: true } });
+        // The inherited value is the empty field's placeholder, framed dashed, as a row's inherited property is.
+        expect(steps.property).toEqual({ value: '', placeholder: 'lab', dashed: true, open: { greyed: true } });
         expect(steps.tag).toEqual({ text: '#sec', label: tr('modal.hub.cascadeTagLocked', { source: section }) });
         expect(pressed).toMatchObject({ open: true, leaves: 0, activeFile: true });
         // Indented as Obsidian's settings say (a tab, Obsidian's default).

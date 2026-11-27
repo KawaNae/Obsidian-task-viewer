@@ -51,7 +51,7 @@ const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const valueInput = key => rowOf(key).querySelector('input.tv-ctrl__text-input');
 /** Choose the item titled \`title\` from the menu of the property's row \`key\`. */
-const pickOf = (key, title) => { rowOf(key).querySelector('.task-hub__prop-more').click(); menuItem(i => i.titleEl?.textContent === title); };
+const pickOf = (key, title) => { rowOf(key).querySelector('button.tv-form__menu-button').click(); menuItem(i => i.titleEl?.textContent === title); };
 const openInherited = key => pickOf(key, ${JSON.stringify(tr('modal.hub.openInheritedLine'))});
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const type = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
@@ -135,7 +135,7 @@ describe('the hub opens the line a value is written on', () => {
     it('opens a finding\'s line where a write of ours moved it', () => {
         openHub('親');
         const line = run<number>(`
-            pickOf('ok', ${JSON.stringify(tr('modal.hub.deleteProperty'))});
+            pickOf('ok', ${JSON.stringify(tr('modal.hub.deleteKey'))});
             await until(() => !rowOf('ok'));
             await sleep(600);
             rowOf('memo').nextElementSibling.querySelector('.tv-form__issue-action').click();

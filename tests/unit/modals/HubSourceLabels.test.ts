@@ -68,7 +68,7 @@ function formOn(openSource: HubHost['openSource']) {
         actions: root.findAll('tv-form__issue-action'),
         /** The property's "open inherited line", from its row's menu. */
         propertyOpen: () => {
-            click(root.find('task-hub__prop-more')!);
+            click(root.findAll('tv-form__menu-button').find(el => el.attrs.get('aria-label') === 'Menu of area')!);
             return menus.last()!.items.find(item => item.title === 'Open inherited line')!;
         },
     };

@@ -8,12 +8,11 @@
  * - A list's item × pressed with an item typed in the list's add field: the
  *   item typed is added and the item pressed taken out, the add field empty
  *   and in focus. On a task not written yet too, its draft holding them.
- * - A text value's × pressed with a key and a value typed in the add row:
- *   the property added, the value pressed made none, the focus in the add
- *   row's key.
- * - A text value's × pressed with another text value typed over: both
- *   written, the focus in the field typed in; nothing typed, the focus
- *   stays all the same.
+ * - A row's menu button pressed with a key and a value typed in the add
+ *   row: the property added, the menu open, the focus in the add row's key.
+ * - The same with another text value typed over: the value written, the
+ *   focus in the field typed in; nothing typed, the focus stays all the
+ *   same.
  * - A list's item × pressed with another property's value in focus, typed
  *   over or not: the item taken out, what is typed written first, and the
  *   focus and its caret left in the value, built anew with the rows. On a
@@ -88,7 +87,13 @@ const overlays = () => [...document.querySelectorAll('.tv-overlay:not(.is-closin
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const valueInput = key => rowOf(key).querySelector('input.task-hub__value');
-const valueClear = key => rowOf(key).querySelector('.task-hub__value-box .tv-form__clear-button');
+const moreOf = key => rowOf(key).querySelector('button.tv-form__menu-button');
+/** The row's menu opened by a press, and closed again once it is open. */
+const menuPressed = async key => {
+    press(moreOf(key));
+    await until(() => menuTitles().length > 0, 3000, () => 'no menu');
+    closeMenus();
+};
 const items = key => [...rowOf(key).querySelectorAll('.task-hub__list-items .task-hub__list-item input')].map(i => i.value);
 const itemClear = (key, item) => [...rowOf(key).querySelectorAll('.task-hub__list-items .task-hub__list-item')]
     .find(el => el.querySelector('input')?.value === item).querySelector('.tv-form__clear-button');
@@ -223,41 +228,39 @@ describe('a button pressed with another field typed in', () => {
         expect(out).toEqual({ items: ['企画書', 'zz'], add: '', focused: true, writes: 2, disk: withLines(3, 5, '\t\t- 企画書', '\t\t- zz') });
     });
 
-    it('a text value\'s ×, a key and a value typed in the add row: the property added, the value pressed made none, the focus in the add row\'s key', () => {
+    it('a row\'s menu button, a key and a value typed in the add row: the property added, the menu open, the focus in the add row\'s key', () => {
         const out = run<Record<string, unknown>>(`
             await openRow('親', 'detail');
             typeIn(addKey(), 'newkey');
             typeIn(addValue(), 'v');
             watchWrites();
-            press(valueClear('memo'));
-            await until(() => rowOf('newkey') && valueInput('memo').value === '', 3000, () => 'memo ' + valueInput('memo').value);
+            await menuPressed('memo');
+            await until(() => rowOf('newkey'), 3000, () => 'no row newkey');
             return JSON.stringify(await settled(() => ({ added: valueInput('newkey').value, add: [addKey().value, addValue().value], focused: document.activeElement === addKey() })));
         `);
-        expect(out).toEqual({ added: 'v', add: ['', ''], focused: true, writes: 2, disk: withLines(5, 7, '\t- memo::', '\t- summary:: 資料', '\t- newkey:: v') });
+        expect(out).toEqual({ added: 'v', add: ['', ''], focused: true, writes: 1, disk: withLines(7, 7, '\t- newkey:: v') });
     });
 
-    it('a text value\'s ×, another text value typed over: both written, the focus in the field typed in', () => {
+    it('a row\'s menu button, a text value typed over: the value written, the menu open, the focus in the field typed in', () => {
         const out = run<Record<string, unknown>>(`
             await openRow('親', 'detail');
             typeIn(valueInput('summary'), '資料XX');
             watchWrites();
-            press(valueClear('memo'));
-            await until(() => valueInput('memo').value === '', 3000, () => 'memo ' + valueInput('memo').value);
+            await menuPressed('memo');
             return JSON.stringify(await settled(() => ({ summary: valueInput('summary').value, focused: document.activeElement === valueInput('summary') })));
         `);
-        expect(out).toEqual({ summary: '資料XX', focused: true, writes: 2, disk: withLines(5, 7, '\t- memo::', '\t- summary:: 資料XX') });
+        expect(out).toEqual({ summary: '資料XX', focused: true, writes: 1, disk: withLines(6, 7, '\t- summary:: 資料XX') });
     });
 
-    it('a text value\'s ×, another field in focus with nothing typed: the focus stays in the field', () => {
+    it('a row\'s menu button, another field in focus with nothing typed: the menu open, the focus stays in the field', () => {
         const out = run<Record<string, unknown>>(`
             await openRow('親', 'detail');
             focusIn(valueInput('memo'));
             watchWrites();
-            press(valueClear('summary'));
-            await until(() => valueInput('summary').value === '', 3000, () => 'summary ' + valueInput('summary').value);
+            await menuPressed('summary');
             return JSON.stringify(await settled(() => ({ focused: document.activeElement === valueInput('memo') })));
         `);
-        expect(out).toEqual({ focused: true, writes: 1, disk: withLines(6, 7, '\t- summary::') });
+        expect(out).toEqual({ focused: true, writes: 0, disk: LINES.join('\n') });
     });
 
     /** The text value memo in focus, typed over with `typed` or not, its caret after the first letter, and the list's item × pressed. */
@@ -302,14 +305,14 @@ describe('a button pressed with another field typed in', () => {
             await openRow('親', 'detail');
             typeIn(valueInput('summary'), '資料XX');
             watchWrites();
-            press(rowOf('summary').querySelector('.task-hub__prop-more'));
+            press(moreOf('summary'));
             await until(() => menuTitles().length > 0, 3000, () => 'no menu');
             const menu = menuTitles();
             closeMenus();
             return JSON.stringify(await settled(() => ({ menu })));
         `);
         expect(out).toEqual({
-            menu: [tr('modal.hub.typeText'), tr('modal.hub.toList'), tr('modal.hub.deleteProperty')],
+            menu: [tr('modal.hub.typeText'), tr('modal.hub.toList'), tr('modal.hub.deleteKey')],
             writes: 1,
             disk: withLines(6, 7, '\t- summary:: 資料XX'),
         });
@@ -395,8 +398,7 @@ describe('a button pressed as the IME converts', () => {
             await convert('かい');
             await until(() => valueInput('summary').value === '資料かい', 3000, () => 'value ' + valueInput('summary').value);
             watchWrites();
-            press(valueClear('memo'));
-            await until(() => valueInput('memo').value === '', 3000, () => 'memo ' + valueInput('memo').value);
+            await menuPressed('memo');
             const pressed = await settled(() => ({ summary: valueInput('summary').value, focused: document.activeElement === valueInput('summary'), ends: [...R.ends] }));
             await finish('かい');
             await until(() => R.ends.length > 0, 3000, () => 'no compositionend');
@@ -405,10 +407,10 @@ describe('a button pressed as the IME converts', () => {
             const left = await settled(() => ({}));
             return JSON.stringify({ pressed, ended, left });
         `);
-        const disk = withLines(5, 7, '\t- memo::', '\t- summary:: 資料かい');
-        expect(out.pressed).toEqual({ summary: '資料かい', focused: true, ends: [], writes: 2, disk });
-        expect(out.ended).toEqual({ summary: '資料かい', ends: ['かい'], writes: 2, disk });
-        expect(out.left).toEqual({ writes: 2, disk });
+        const disk = withLines(6, 7, '\t- summary:: 資料かい');
+        expect(out.pressed).toEqual({ summary: '資料かい', focused: true, ends: [], writes: 1, disk });
+        expect(out.ended).toEqual({ summary: '資料かい', ends: ['かい'], writes: 1, disk });
+        expect(out.left).toEqual({ writes: 1, disk });
     });
 
     it('in a list\'s add field, the item being converted added once, the field built anew empty and in focus; the field left writes nothing more', () => {

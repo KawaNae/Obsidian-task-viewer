@@ -3,13 +3,14 @@
  * shown an item a line, each item edited, taken out, added and moved, and
  * every edit writes the list as its block of the note. An item that would
  * not read back as one is said under the row and not written. An inherited
- * list is shown as chips and not edited, and made the row's own from a copy
- * of its items by its menu, written by the first edit. A list, the row's
- * own or inherited, is made no value by its menu. A text value is converted
- * to a list of it, and a list of one item to its text, by the row's menu,
- * whose head says the value's type greyed. A value an Enter wrote, the
- * field keeping the focus, is drawn and offered by the menu as the row is
- * now.
+ * list is shown as chips and not edited, and written as the row's own, its
+ * items copied, by its menu at once. A list, the row's own over an
+ * inherited one or inherited, is made no value by its menu, and the row's
+ * own is taken out by "Clear and follow inherited value". A text value is
+ * converted to a list of it, and a list of one item to its text, by the
+ * row's menu, whose head says the value's type greyed. A value an Enter
+ * wrote, the field keeping the focus, is drawn and offered by the menu as
+ * the row is now.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -51,9 +52,9 @@ const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.
 const items = key => [...rowOf(key).querySelectorAll('.task-hub__list-items .task-hub__list-item input')];
 const addItem = key => rowOf(key).querySelector('.task-hub__list-add');
 /** The titles of the menu of the property's row \`key\`, the menu closed again. */
-const menuOf = key => { rowOf(key).querySelector('.task-hub__prop-more').click(); const titles = menuTitles(); closeMenus(); return titles; };
+const menuOf = key => { rowOf(key).querySelector('button.tv-form__menu-button').click(); const titles = menuTitles(); closeMenus(); return titles; };
 /** Choose the item titled \`title\` from the menu of the property's row \`key\`. */
-const pickOf = (key, title) => { rowOf(key).querySelector('.task-hub__prop-more').click(); menuItem(i => i.titleEl?.textContent === title); };
+const pickOf = (key, title) => { rowOf(key).querySelector('button.tv-form__menu-button').click(); menuItem(i => i.titleEl?.textContent === title); };
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const says = row => [...row.nextElementSibling.children].map(c => c.className + ': ' + c.firstChild.textContent);
 const type = (input, text) => { chooseTabOf(input).focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
@@ -120,19 +121,17 @@ describe('the hub edits a list item by item', () => {
             own: ['a', 'b'], add: true, inherited: ['lab', 'home'], inheritedInputs: 0,
             inheritedMenu: [
                 tr('modal.hub.typeList'), tr('modal.hub.fromSection'),
-                tr('modal.hub.openInheritedLine'), tr('modal.hub.makeOwn'), tr('modal.hub.setNoValue'),
+                tr('modal.hub.openInheritedLine'), tr('modal.hub.writeInherited'), tr('modal.hub.setNoValue'),
             ],
         });
     });
 
-    it('shows a × in each item\'s field and none for the list whole, the row\'s menu button standing by its first item, and the inherited chips on the key\'s line', () => {
+    it('shows a × in each item\'s field and none for the list whole, the row\'s menu button in the add field\'s box, and the inherited chips on the key\'s line with the menu button at their end', () => {
         openHub('親');
         const shown = run<Record<string, unknown>>(`
             const top = el => Math.round(el.getBoundingClientRect().top);
-            const middle = el => { const r = el.getBoundingClientRect(); return Math.round(r.top + r.height / 2); };
             const own = rowOf('k');
-            const more = own.querySelector('.task-hub__prop-more');
-            const first = own.querySelector('.task-hub__list-item');
+            const more = own.querySelector('button.tv-form__menu-button');
             const inherited = rowOf('area');
             const label = inherited.querySelector('.tv-form__label').getBoundingClientRect();
             const chips = inherited.querySelector('.task-hub__list-chips').getBoundingClientRect();
@@ -140,31 +139,33 @@ describe('the hub edits a list item by item', () => {
                 itemXs: [...own.querySelectorAll('.task-hub__list-item .tv-form__clear-button')].map(x => x.getAttribute('aria-label')),
                 addX: !!own.querySelector('.task-hub__list-item--add .tv-form__clear-button'),
                 ownMenu: menuOf('k'),
-                moreByFirst: Math.abs(middle(more) - middle(first)) <= 1,
+                moreInAddBox: more.parentElement === own.querySelector('.task-hub__list-add').parentElement && more.parentElement.classList.contains('task-hub__list-item-box'),
                 moreLabel: more.getAttribute('aria-label'),
                 chipsBesideKey: chips.left >= label.right && Math.abs(top(inherited.querySelector('.task-hub__list-chip')) - top(inherited)) < 12,
+                inheritedMore: !!inherited.querySelector('.task-hub__list-chips .tv-form__menu-button--inline'),
                 inheritedXs: inherited.querySelectorAll('.tv-form__clear-button').length,
             });
         `);
         expect(shown).toEqual({
             itemXs: [tr('modal.hub.removeItem', { item: 'a' }), tr('modal.hub.removeItem', { item: 'b' })],
             addX: false,
-            ownMenu: [tr('modal.hub.typeList'), tr('modal.hub.setNoValue'), tr('modal.hub.deleteProperty')],
-            moreByFirst: true,
-            moreLabel: tr('modal.hub.propertyMenu', { key: 'k' }),
+            ownMenu: [tr('modal.hub.typeList'), tr('modal.hub.deleteKey')],
+            moreInAddBox: true,
+            moreLabel: tr('modal.hub.fieldMenu', { field: 'k' }),
             chipsBesideKey: true,
+            inheritedMore: true,
             inheritedXs: 0,
         });
     });
 
-    it('makes the inherited list and the row\'s own no value from their menus', () => {
+    it('makes the inherited list no value from its menu, and the row\'s own list taken out from its menu', () => {
         openHub('親');
         run(`pickOf('area', ${JSON.stringify(tr('modal.hub.setNoValue'))}); await sleep(600); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLines(9, 9, '\t- area::'));
-        run(`pickOf('k', ${JSON.stringify(tr('modal.hub.setNoValue'))}); await sleep(600); return 'ok';`);
+        run(`pickOf('k', ${JSON.stringify(tr('modal.hub.deleteKey'))}); await sleep(600); return 'ok';`);
         const out = [...LINES];
         out.splice(9, 0, '\t- area::');
-        out.splice(6, 2);
+        out.splice(5, 3);
         expect(readTestFile(TEST_FILE)).toBe(out.join('\n'));
     });
 
@@ -192,7 +193,7 @@ describe('the hub edits a list item by item', () => {
     it('converts a text value to a list of it from its menu, its type said greyed at the head, the focus put in no input', () => {
         openHub('親');
         const shown = run<Record<string, unknown>>(`
-            rowOf('memo').querySelector('.task-hub__prop-more').click();
+            rowOf('memo').querySelector('button.tv-form__menu-button').click();
             const head = menuItems().slice(0, 1).map(i => [i.titleEl?.textContent, !!i.disabled]);
             const menu = menuTitles();
             closeMenus();
@@ -202,7 +203,7 @@ describe('the hub edits a list item by item', () => {
         `);
         expect(shown).toEqual({
             head: [[tr('modal.hub.typeText'), true]],
-            menu: [tr('modal.hub.typeText'), tr('modal.hub.toList'), tr('modal.hub.deleteProperty')],
+            menu: [tr('modal.hub.typeText'), tr('modal.hub.toList'), tr('modal.hub.deleteKey')],
             items: ['x'],
             inInput: false,
         });
@@ -215,12 +216,12 @@ describe('the hub edits a list item by item', () => {
         expect(readTestFile(TEST_FILE)).toBe(withLines(7, 8));
         const shown = run<Record<string, unknown>>(`
             const menu = menuOf('k');
-            pickOf('k', ${JSON.stringify(tr('modal.hub.toText'))});
+            pickOf('k', ${JSON.stringify(tr('modal.hub.toSingleValue'))});
             await sleep(600);
             return JSON.stringify({ menu, value: rowOf('k').querySelector('input.task-hub__value')?.value ?? null });
         `);
         expect(shown).toEqual({
-            menu: [tr('modal.hub.typeList'), tr('modal.hub.toText'), tr('modal.hub.setNoValue'), tr('modal.hub.deleteProperty')],
+            menu: [tr('modal.hub.typeList'), tr('modal.hub.toSingleValue'), tr('modal.hub.deleteKey')],
             value: 'a',
         });
         expect(readTestFile(TEST_FILE)).toBe(withLines(5, 8, '\t- k:: a'));
@@ -292,30 +293,30 @@ describe('the hub edits a list item by item', () => {
         expect(said[0]).toMatch(/^tv-form__error/);
     });
 
-    it('makes an inherited list the row\'s own from a copy, written by the first edit, leaving the focus out of its inputs', () => {
+    it('writes an inherited list as the row\'s own from its menu at once, leaving the focus out of its inputs', () => {
         openHub('親');
-        const inInput = run<boolean>(`pickOf('area', ${JSON.stringify(tr('modal.hub.makeOwn'))}); await sleep(300); return document.activeElement instanceof HTMLInputElement;`);
+        const inInput = run<boolean>(`pickOf('area', ${JSON.stringify(tr('modal.hub.writeInherited'))}); await sleep(600); return document.activeElement instanceof HTMLInputElement;`);
         expect(inInput).toBe(false);
-        expect(readTestFile(TEST_FILE)).toBe(LINES.join('\n'));
+        expect(readTestFile(TEST_FILE)).toBe(withLines(9, 9, '\t- area::', '\t\t- lab', '\t\t- home'));
         const shown = run<string[]>(`return JSON.stringify(items('area').map(i => i.value));`);
         expect(shown).toEqual(['lab', 'home']);
         run(`type(addItem('area'), 'desk'); await enter(addItem('area')); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLines(9, 9, '\t- area::', '\t\t- lab', '\t\t- home', '\t\t- desk'));
     });
 
-    it('throws a draft of an inherited list away by its menu\'s revert, writing nothing', () => {
+    it('takes the line out of a list written from the inherited one by "Clear and follow inherited value", the chips back', () => {
         openHub('親');
-        run(`pickOf('area', ${JSON.stringify(tr('modal.hub.makeOwn'))}); await sleep(300); return 'ok';`);
+        run(`pickOf('area', ${JSON.stringify(tr('modal.hub.writeInherited'))}); await sleep(600); return 'ok';`);
         const shown = run<Record<string, unknown>>(`
             const menu = menuOf('area');
-            pickOf('area', ${JSON.stringify(tr('modal.hub.revertToInherited'))});
-            await sleep(300);
+            pickOf('area', ${JSON.stringify(tr('modal.hub.clearToInherited'))});
+            await sleep(600);
             return JSON.stringify({ menu, inputs: rowOf('area').querySelectorAll('input').length, chips: rowOf('area').querySelectorAll('.task-hub__list-chip').length });
         `);
         expect(shown).toEqual({
             menu: [
                 tr('modal.hub.typeList'), tr('modal.hub.fromSection'),
-                tr('modal.hub.openInheritedLine'), tr('modal.hub.setNoValue'), tr('modal.hub.revertToInherited'),
+                tr('modal.hub.openInheritedLine'), tr('modal.hub.setNoValue'), tr('modal.hub.clearToInherited'),
             ],
             inputs: 0,
             chips: 2,
@@ -343,14 +344,14 @@ describe('an inherited text an Enter makes the row\'s own', () => {
 
     beforeEach(async () => { await writeIndexedTestFile(TEST_FILE, INHERITED.join('\n')); });
 
-    it('is drawn as the row\'s own at once, the field keeping the focus, and its menu offers to revert to the inherited value', () => {
+    it('is drawn as the row\'s own at once, the field keeping the focus, and its menu offers to clear it and follow the inherited value', () => {
         openHub('親');
         const shown = run<Record<string, unknown>>(`
             const input = rowOf('place').querySelector('input.task-hub__value');
             type(input, 'zq8');
             await enter(input);
             const row = rowOf('place');
-            const look = { focused: document.activeElement === input, dashed: row.classList.contains('task-hub__row--inherited'), mark: !!row.querySelector('.task-hub__prop-mark') };
+            const look = { focused: document.activeElement === input, dashed: row.querySelector('.task-hub__value-box').classList.contains('tv-form__control--inherited') };
             chooseTabOf(nameInput()).focus();
             await sleep(600);
             return JSON.stringify({ ...look, menu: menuOf('place') });
@@ -358,10 +359,9 @@ describe('an inherited text an Enter makes the row\'s own', () => {
         expect(shown).toEqual({
             focused: true,
             dashed: false,
-            mark: false,
             menu: [
                 tr('modal.hub.typeText'), tr('modal.hub.fromSection'),
-                tr('modal.hub.openInheritedLine'), tr('modal.hub.toList'), tr('modal.hub.revertToInherited'),
+                tr('modal.hub.openInheritedLine'), tr('modal.hub.toList'), tr('modal.hub.setNoValue'), tr('modal.hub.clearToInherited'),
             ],
         });
         const lines = [...INHERITED];

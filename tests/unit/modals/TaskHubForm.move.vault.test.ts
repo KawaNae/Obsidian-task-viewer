@@ -521,13 +521,17 @@ describe('the move thrown away', () => {
         expect(start.value).toBe('2026-11-26');
     });
 
-    it('lets go of an inherited list made the row\'s own and not written yet: the inherited list shows again', async () => {
+    it('writes an inherited list as the row\'s own into the draft from its menu, not the note, and lets it go with the move: the inherited list shows again', async () => {
         const h = await open(LISTS, { rowName: 'Row' });
         await h.begin();
-        h.click(rowOf(h, 'area')!.find('task-hub__prop-more')!);
-        h.menus.last()!.items.find(item => item.title === t('modal.hub.makeOwn'))!.click!();
+        h.click(rowOf(h, 'area')!.find('tv-form__menu-button')!);
+        h.menus.last()!.items.find(item => item.title === t('modal.hub.writeInherited'))!.click!();
+        await settle();
         expect(rowOf(h, 'area')!.find('task-hub__list-chip--cascade')).toBeNull();
+        expect(h.lines()).toEqual(LISTS);
         h.click(h.cancelButton());
+        await settle();
+        h.click(h.foot.find('tv-form__discard'));
         await settle();
         expect(h.move()).toBeNull();
         expect(rowOf(h, 'area')!.find('task-hub__list-chip--cascade')).not.toBeNull();
@@ -537,14 +541,14 @@ describe('the move thrown away', () => {
 describe('a move\'s property converted from its row\'s menu', () => {
     const LISTS = ['# Tasks', '- [ ] Row @2026-11-26', '    - l::', '        - p', '    - m:: q', '# Done', ''];
     const pickOf = (h: Hub, key: string, title: string) => {
-        h.click(rowOf(h, key)!.find('task-hub__prop-more')!);
+        h.click(rowOf(h, key)!.find('tv-form__menu-button')!);
         h.menus.last()!.items.find(item => item.title === title)!.click!();
     };
 
     it('writes the conversions into the draft, not the note: a list of one item to its text, and a text to a list of it', async () => {
         const h = await open(LISTS, { rowName: 'Row' });
         await h.begin();
-        pickOf(h, 'l', t('modal.hub.toText'));
+        pickOf(h, 'l', t('modal.hub.toSingleValue'));
         await settle();
         pickOf(h, 'm', t('modal.hub.toList'));
         await settle();

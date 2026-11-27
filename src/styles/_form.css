@@ -345,7 +345,11 @@
     padding-inline-end: 28px;
 }
 
-.tv-ctrl .tv-form__menu-button {
+/* `button` in the selector: Obsidian pads a button on a tablet 4px 20px
+ * (`.is-tablet button:not(.clickable-icon)`, (0,2,1)), which would push the
+ * icon out of the button. */
+.tv-ctrl button.tv-icon-btn.tv-form__menu-button {
+    padding: 0;
     position: absolute;
     top: 0;
     inset-inline-end: 0;
@@ -357,7 +361,7 @@
     color: var(--tv-text-muted);
 }
 
-.is-mobile .tv-ctrl .tv-form__menu-button {
+.is-mobile .tv-ctrl button.tv-icon-btn.tv-form__menu-button {
     width: 28px;
 }
 
@@ -366,14 +370,14 @@
 }
 
 /* In a row of chips (an inherited list), at its end */
-.tv-ctrl .tv-form__menu-button--inline {
+.tv-ctrl button.tv-icon-btn.tv-form__menu-button--inline {
     position: static;
     height: 24px;
     margin-inline-start: auto;
     border-radius: var(--tv-radius-s);
 }
 
-.is-mobile .tv-ctrl .tv-form__menu-button--inline {
+.is-mobile .tv-ctrl button.tv-icon-btn.tv-form__menu-button--inline {
     height: var(--input-height);
 }
 

@@ -101,19 +101,17 @@ const valueOf = (h: PropHub, key: string) => rowOf(h, key)!.find('task-hub__valu
 const focused = (h: PropHub) => h.root.ownerDocument.activeElement;
 /** The titles of the menu the row's … shows now. */
 const menuOf = (h: PropHub, key: string) => {
-    rowOf(h, key)!.find('task-hub__prop-more')!.dispatchEvent(new Event('click'));
+    rowOf(h, key)!.find('tv-form__menu-button')!.dispatchEvent(new Event('click'));
     return h.menus.last()!.items.map(item => item.title);
 };
 const pick = (h: PropHub, key: string, title: string) => {
-    rowOf(h, key)!.find('task-hub__prop-more')!.dispatchEvent(new Event('click'));
+    rowOf(h, key)!.find('tv-form__menu-button')!.dispatchEvent(new Event('click'));
     h.menus.last()!.items.find(item => item.title === title)!.click!();
 };
-/** The mark by the row's key, as its class names it; null for none. */
-const markOf = (h: PropHub, key: string) => {
-    const mark = rowOf(h, key)!.find('task-hub__prop-mark');
-    return mark ? [...mark.classes].find(c => c.startsWith('task-hub__prop-mark--'))!.slice('task-hub__prop-mark--'.length) : null;
-};
-const inheritedLook = (h: PropHub, key: string) => rowOf(h, key)!.classes.has('task-hub__row--inherited');
+/** Whether the box of the row's value field is drawn dashed, as what it is given. */
+const dashed = (h: PropHub, key: string) => valueOf(h, key).parent!.classes.has('tv-form__control--inherited');
+/** The value the row's own no value hides, as the box draws it struck through; null for none. */
+const struckOf = (h: PropHub, key: string) => valueOf(h, key).parent!.find('tv-form__struck-text')?.text ?? null;
 
 /** Add the property `k` with the value `a` from the add row. */
 async function addOwn(h: PropHub) {
@@ -152,7 +150,22 @@ describe.each(HOSTS)('a property\'s row once its value is committed with Enter, 
         expect(field.placeholder).toBe(t('modal.hub.noValue'));
         h.name().focus();
         await h.settle();
-        expect(menuOf(h, 'k')).toEqual([t('modal.hub.deleteProperty')]);
+        expect(menuOf(h, 'k')).toEqual([t('modal.hub.deleteKey')]);
+    });
+
+    it('a no value spelled (`null`, `~`) typed: written as typed, over the row\'s own value, over an inherited one and hiding it, and over nothing', async () => {
+        const own = await open([]);
+        await addOwn(own);
+        await typeEnter(own, 'k', 'null');
+        expect(valuesOf(own.properties())).toEqual({ k: { type: 'null', spelling: 'null' } });
+        const over = await open(['- k:: s']);
+        await typeEnter(over, 'k', 'o');
+        await typeEnter(over, 'k', 'null');
+        expect(valuesOf(over.properties())).toEqual({ k: { type: 'null', spelling: 'null' } });
+        expect(struckOf(over, 'k')).toBe('s');
+        const given = await open(['- k:: s']);
+        await typeEnter(given, 'k', '~');
+        expect(valuesOf(given.properties())).toEqual({ k: { type: 'null', spelling: '~' } });
     });
 
     it('typed over: the menu, opened once the field is left, converts the value typed', async () => {
@@ -176,29 +189,53 @@ describe.each(HOSTS)('a property\'s row once its value is committed with Enter, 
         expect(valuesOf(h.properties())).toEqual({ k: { type: 'null', spelling: '' } });
     });
 
-    it('an inherited value typed over: drawn as the row\'s own at once, and its menu reverts to the inherited value', async () => {
+    it('an inherited value typed over: drawn as the row\'s own at once, and its menu follows the inherited value again', async () => {
         const h = await open(['- k:: s']);
-        expect([markOf(h, 'k'), inheritedLook(h, 'k')]).toEqual(['inherited', true]);
+        expect([valueOf(h, 'k').value, valueOf(h, 'k').placeholder, dashed(h, 'k')]).toEqual(['', 's', true]);
         const field = await typeEnter(h, 'k', 'o');
         expect(valuesOf(h.properties())).toEqual({ k: text('o') });
         expect(focused(h)).toBe(field);
-        expect([markOf(h, 'k'), inheritedLook(h, 'k')]).toEqual([null, false]);
+        expect([field.value, field.placeholder, dashed(h, 'k')]).toEqual(['o', 's', false]);
         h.name().focus();
         await h.settle();
-        expect(menuOf(h, 'k')).toContain(t('modal.hub.revertToInherited'));
-        pick(h, 'k', t('modal.hub.revertToInherited'));
+        expect(menuOf(h, 'k')).toContain(t('modal.hub.clearToInherited'));
+        pick(h, 'k', t('modal.hub.clearToInherited'));
         await h.settle();
         expect(valuesOf(h.properties())).toEqual({});
-        expect([markOf(h, 'k'), inheritedLook(h, 'k'), valueOf(h, 'k').value]).toEqual(['inherited', true, 's']);
+        expect([valueOf(h, 'k').value, valueOf(h, 'k').placeholder, dashed(h, 'k')]).toEqual(['', 's', true]);
     });
 
-    it('an inherited value emptied: drawn hiding it at once, struck through', async () => {
+    it('an inherited value emptied: nothing is written, the field kept with the focus, the inherited value its faint text', async () => {
         const h = await open(['- k:: s']);
         const field = await typeEnter(h, 'k', '');
-        expect(valuesOf(h.properties())).toEqual({ k: { type: 'null', spelling: '' } });
+        expect(valuesOf(h.properties())).toEqual({});
         expect(focused(h)).toBe(field);
-        expect([markOf(h, 'k'), inheritedLook(h, 'k'), field.placeholder, field.classes.has('task-hub__value--struck')])
-            .toEqual(['hiding', false, 's', true]);
+        expect([field.value, field.placeholder, dashed(h, 'k')]).toEqual(['', 's', true]);
+    });
+
+    it('an own value over an inherited one emptied: the own line is taken out at once, the inherited value shown in a dashed box', async () => {
+        const h = await open(['- k:: s']);
+        await typeEnter(h, 'k', 'o');
+        const field = await typeEnter(h, 'k', '');
+        expect(valuesOf(h.properties())).toEqual({});
+        expect(focused(h)).toBe(field);
+        expect([field.value, field.placeholder, dashed(h, 'k')]).toEqual(['', 's', true]);
+    });
+
+    it('an inherited value set to no value from the menu: drawn hiding it at once, struck through', async () => {
+        const h = await open(['- k:: s']);
+        pick(h, 'k', t('modal.hub.setNoValue'));
+        await h.settle();
+        expect(valuesOf(h.properties())).toEqual({ k: { type: 'null', spelling: '' } });
+        expect([valueOf(h, 'k').placeholder, struckOf(h, 'k'), dashed(h, 'k')]).toEqual(['s', 's', false]);
+    });
+
+    it('an inherited value written to the task from the menu: the row\'s own, spelled as it was', async () => {
+        const h = await open(['- k:: s']);
+        pick(h, 'k', t('modal.hub.writeInherited'));
+        await h.settle();
+        expect(valuesOf(h.properties())).toEqual({ k: text('s') });
+        expect([valueOf(h, 'k').value, dashed(h, 'k')]).toEqual(['s', false]);
     });
 });
 

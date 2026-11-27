@@ -15,9 +15,8 @@ export type Written = boolean | 'dropped';
 export interface BoundField<T> {
     /**
      * What the field holds that is not its value: the reading of the text
-     * typed, when it is not the value shown, or when it is the value typed
-     * again over a field that makes it the row's own (`takesSame`); null
-     * when the field shows its value. What a close asks of a form: saved
+     * typed, when it is not the value shown; null when the field shows its
+     * value. What a close asks of a form: saved
      * when it reads, asked about when it does not.
      */
     pending(): Read<T> | null;
@@ -64,13 +63,6 @@ export interface BindFieldOptions<T> {
     /** Whether a list open on the field takes an Enter (`onFormEnter`). */
     takesEnter?: () => boolean;
     /**
-     * Whether a commit of a text typed over the field is handed on even when
-     * it reads as the current value: a field that shows a value the row
-     * inherits, where typing it again makes it the row's own. A field left
-     * as it was shown (focused and left, nothing typed) commits nothing.
-     */
-    takesSame?: () => boolean;
-    /**
      * How a text is put in the field: the field's own way when it shows the
      * text elsewhere too (`PickerTextField.setText` keeps its clear button
      * and its picker in step). By default, the input's value.
@@ -109,15 +101,11 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     let given = input.value;
     /** The write a commit is waiting for: what it decides, the field holds as typed till then. */
     let writing: Promise<Written> | null = null;
-    /** Whether anything was typed since the field was last given its text (`takesSame`). */
-    let typedOver = false;
     // The field's composition is followed from now on.
     composingIn(input);
 
     const shownValue = () => codec.show(opts.current());
-    /** The value typed again over a field that makes it the row's own (`takesSame`): a commit hands it on. */
-    const typedSame = () => typedOver && (opts.takesSame?.() ?? false);
-    const pending = (): Read<T> | null => (input.value === shownValue() && !typedSame() ? null : codec.read(input.value));
+    const pending = (): Read<T> | null => (input.value === shownValue() ? null : codec.read(input.value));
 
     const check = () => {
         const read = pending();
@@ -125,9 +113,7 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     };
 
     const commit = (): boolean => {
-        const same = typedSame();
         const read = pending();
-        typedOver = false;
         if (read === null) {
             // The field shows its value: nothing typed over it.
             given = input.value;
@@ -141,7 +127,7 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
         opts.issues(null);
         const text = codec.show(read.value);
         if (input.value !== text) put(text);
-        if (text === shownValue() && !same) {
+        if (text === shownValue()) {
             given = text;
             return true;
         }
@@ -170,7 +156,6 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
 
     const { signal } = opts;
     input.addEventListener('input', (e) => {
-        typedOver = true;
         if (!(e as InputEvent).isComposing) check();
     }, { signal });
     input.addEventListener('compositionend', check, { signal });
@@ -178,7 +163,6 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     onFormEnter(input, commit, { takesEnter: opts.takesEnter, signal });
     const discard = (): void => {
         writing = null;
-        typedOver = false;
         const text = shownValue();
         if (input.value !== text) put(text);
         given = text;
@@ -199,7 +183,6 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
             const text = codec.show(value);
             if (input.value !== text) put(text);
             given = text;
-            typedOver = false;
             opts.issues(null);
         },
         commit,
