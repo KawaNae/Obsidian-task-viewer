@@ -89,6 +89,28 @@ describe('CascadeSource', () => {
         expect(CascadeSource.lineOfTag(root('under'), 'top')).toEqual({ line: 6 });
     });
 
+    it('says where a built-in is given, whether or not the row says its own, and none for one nothing gives', () => {
+        expect(CascadeSource.forField(task('own'), 'mask')).toBe('section');
+        expect(CascadeSource.forField(task('own none'), 'color')).toBe('section');
+        expect(CascadeSource.forField(task('row'), 'color')).toBe('file');
+        expect(CascadeSource.forField(task('row'), 'linestyle')).toBeNull();
+    });
+
+    it('opens the line a date and its time are given on by the date\'s key', () => {
+        const dated = rows([
+            '---',
+            'tv-start: 2026-03-01 09:00',
+            '---',
+            '## Section',
+            '- tv-end:: 2026-03-02 10:00',
+            '- [ ] dated',
+        ].join('\n'));
+        expect(CascadeSource.forField(dated('dated'), 'startTime')).toBe('file');
+        expect(CascadeSource.lineOfField(dated('dated'), 'startTime', 'tv-start')).toEqual({ line: 1, frontmatterKey: 'tv-start' });
+        expect(CascadeSource.lineOfField(dated('dated'), 'endTime', 'tv-end')).toEqual({ line: 4 });
+        expect(CascadeSource.lineOfField(dated('dated'), 'due', 'tv-due')).toBeNull();
+    });
+
     it('labels a value of the note as the file\'s, and one of a heading\'s section as the section\'s', () => {
         expect(CascadeSource.label('file')).toBe('inherited: file');
         expect(CascadeSource.label('section')).toBe('inherited: section');

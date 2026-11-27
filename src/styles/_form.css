@@ -332,6 +332,151 @@
     height: 12px;
 }
 
+/* The … at the end of a field (FieldMenuButton): it stands over the field's
+ * end, where a ×'s place is: 24px wide on a desktop, 28px on a phone or a
+ * tablet, its icon as the picker buttons' icons are (14px, muted). */
+.tv-form__has-menu {
+    position: relative;
+}
+
+.tv-ctrl .tv-form__has-menu > .tv-ctrl__text-input,
+.tv-ctrl .tv-form__input-with-picker.tv-form__has-menu .tv-ctrl__text-input,
+.tv-ctrl .tv-form__input-with-picker--color.tv-form__has-menu .tv-ctrl__text-input {
+    padding-inline-end: 28px;
+}
+
+.tv-ctrl .tv-form__menu-button {
+    position: absolute;
+    top: 0;
+    inset-inline-end: 0;
+    width: 24px;
+    height: 100%;
+    border-radius: 0;
+    border-start-end-radius: var(--input-radius, var(--tv-radius-s));
+    border-end-end-radius: var(--input-radius, var(--tv-radius-s));
+    color: var(--tv-text-muted);
+}
+
+.is-mobile .tv-ctrl .tv-form__menu-button {
+    width: 28px;
+}
+
+.tv-ctrl .tv-form__menu-button:disabled {
+    cursor: not-allowed;
+}
+
+/* In a row of chips (an inherited list), at its end */
+.tv-ctrl .tv-form__menu-button--inline {
+    position: static;
+    height: 24px;
+    margin-inline-start: auto;
+    border-radius: var(--tv-radius-s);
+}
+
+.is-mobile .tv-ctrl .tv-form__menu-button--inline {
+    height: var(--input-height);
+}
+
+.tv-form__menu-button > span {
+    display: inline-flex;
+}
+
+.tv-form__menu-button .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* A field showing what it is given, not what it says itself
+ * (FieldLookView): a dashed frame, its ground not filled. What it is given
+ * is its placeholder, in the faint text every placeholder has; what is
+ * typed in it is the field's own text. Focused, it is framed as any field
+ * is. */
+.tv-ctrl .tv-form__control--inherited .tv-ctrl__text-input {
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--tv-text-faint);
+}
+
+.tv-ctrl .tv-form__control--inherited .tv-ctrl__text-input:focus {
+    border-style: solid;
+    border-color: var(--tv-accent);
+}
+
+/* The value a field's own no value hides, drawn over the field where its
+ * text stands (FieldLookView), in the field's font and padding: inside the
+ * field's border (1px), its text starting past the field's padding, cut
+ * where the field's text area ends. It comes after the input, and shows
+ * while the input's placeholder does, which holds the same value drawn
+ * clear: it goes once the field holds any text, however it was put in.
+ * The paddings follow the input's own (`tv-ctrl__text-input--md`, the pickers'
+ * and the …'s room above). */
+.tv-form__has-struck {
+    position: relative;
+}
+
+.tv-form__struck {
+    --tv-field-pad-start: 12px;
+    --tv-field-pad-end: 12px;
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    inset-inline-start: 1px;
+    inset-inline-end: calc(1px + var(--tv-field-pad-end));
+    padding-inline-start: var(--tv-field-pad-start);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--tv-text-faint);
+    white-space: pre;
+}
+
+.tv-form__input-with-picker > .tv-form__struck {
+    --tv-field-pad-start: 46px;
+    --tv-field-pad-end: 28px;
+}
+
+.tv-form__input-with-picker--color > .tv-form__struck {
+    --tv-field-pad-start: 66px;
+    --tv-field-pad-end: 12px;
+}
+
+.tv-form__has-menu > .tv-form__struck {
+    --tv-field-pad-end: 28px;
+}
+
+.tv-ctrl .tv-form__has-struck > .tv-ctrl__text-input::placeholder {
+    color: transparent;
+}
+
+.tv-form__has-struck > .tv-ctrl__text-input:not(:placeholder-shown) ~ .tv-form__struck {
+    display: none;
+}
+
+/* The line through the value hidden: how far past the text it reaches on
+ * each side, its height from the text's top (where a line-through stands),
+ * its color and its thickness are set here alone. The text stands `reach`
+ * past where a field's text starts, so that the line starts there, not in
+ * the field's padding. */
+.tv-form__struck-text {
+    --tv-struck-reach: 1ch;
+    --tv-struck-top: 0.583em;
+    --tv-struck-color: currentColor;
+    --tv-struck-thickness: 1px;
+    position: relative;
+    margin-inline-start: var(--tv-struck-reach);
+    line-height: normal;
+}
+
+.tv-form__struck-text::after {
+    content: '';
+    position: absolute;
+    inset-inline-start: calc(-1 * var(--tv-struck-reach));
+    inset-inline-end: calc(-1 * var(--tv-struck-reach));
+    top: var(--tv-struck-top);
+    border-top: var(--tv-struck-thickness) solid var(--tv-struck-color);
+}
+
 /* Task name suggest hint footer */
 .task-name-suggest__footer {
     padding: 4px 8px;

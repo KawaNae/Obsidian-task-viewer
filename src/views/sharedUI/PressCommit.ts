@@ -11,6 +11,8 @@
  *   move to other places as it is written (a list's items) says where each
  *   key goes ({@link carryPressKeys}).
  * - A button that belongs to one field (its ×) says so ({@link ownControl});
+ *   a field's menu button says which fields its items put a value in
+ *   ({@link menuOver});
  *   a button that changes only what is shown says so ({@link showsOnly});
  *   a button that saves or throws away what is typed on its own way (a
  *   close, a cancel, a move begun) says so too ({@link takesTyped}); a part
@@ -32,6 +34,13 @@ export interface FieldCommit {
      * not waited for.
      */
     commit(): boolean;
+    /**
+     * Throw away what is typed and not handed on (a commit refused), the
+     * field showing its value again and saying nothing: what a menu item
+     * that puts a value in the field does first. Nothing for a field
+     * whose text is handed on. None for a field no menu stands over.
+     */
+    drop?(): void;
 }
 
 const commits = new WeakMap<Element, FieldCommit>();
@@ -93,6 +102,8 @@ export function carryPressKeys(doc: Document, moves: ReadonlyMap<string, string 
 
 /** Each field's own buttons (its ×), by the button. */
 const ownControls = new WeakMap<Element, Element>();
+/** Each field menu's button, with the fields its items put a value in. */
+const menusOver = new WeakMap<Element, () => readonly Element[]>();
 /** The buttons that save or throw away what is typed on their own way. */
 const takers = new WeakSet<Element>();
 /** The buttons that change only what is shown: they act on a commit refused too. */
@@ -103,6 +114,23 @@ const leftParts = new WeakSet<Element>();
 /** Say that `button` is `field`'s own (the × that empties it): it acts on the field itself, in focus or not. */
 export function ownControl(button: HTMLElement, field: HTMLElement): void {
     ownControls.set(button, field);
+}
+
+/**
+ * Say that `button` opens a menu whose items put a value in `fields` (a
+ * field's …; the due's date and time are one value). A commit of one of
+ * them refused, it opens still, the text left as typed and why said under
+ * it: opening throws nothing away and writes nothing, and an item picked
+ * puts its own value in the text's stead ({@link FieldCommit.drop}). A
+ * commit of another field refused, it does not act, as any button.
+ */
+export function menuOver(button: HTMLElement, fields: () => readonly Element[]): void {
+    menusOver.set(button, fields);
+}
+
+/** Whether `button` acts though the commit of `field` before it is refused: it changes only what is shown, or it is a menu over the field. */
+function actsRefused(button: Element, field: Element): boolean {
+    return showers.has(button) || (menusOver.get(button)?.().includes(field) ?? false);
 }
 
 /**
@@ -148,7 +176,8 @@ export interface PressHold {
  * - Clicked, what the field holds typed is committed as its Enter commits
  *   it (`ownCommit`), then the button acts. Refused at once, the button
  *   does not act: the focus and why stay with the field. A button that
- *   changes only what is shown (`showsOnly`) acts still. The commit may
+ *   changes only what is shown (`showsOnly`) acts still, and so does a
+ *   field's menu button over the field refused (`menuOver`). The commit may
  *   build the button anew (a list written): the button with its key now
  *   (`pressKey`, `carryPressKeys`) is pressed in its stead, so a button acts
  *   by its own click alone, as it is drawn now.
@@ -184,7 +213,7 @@ export function holdPresses(surface: HTMLElement, opts: PressHold = {}): void {
             return committed;
         });
         if (!result) {
-            if (!showers.has(button)) e.stopImmediatePropagation();
+            if (!actsRefused(button, field)) e.stopImmediatePropagation();
             return;
         }
         if (surface.contains(button)) return;
