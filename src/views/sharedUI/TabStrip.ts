@@ -1,4 +1,5 @@
 import { setIcon } from 'obsidian';
+import { showsOnly } from './PressCommit';
 
 /** A tab: its id, the name it shows, and an icon before the name (Obsidian's icon name), if it has one. */
 export interface TabSpec<K extends string> {
@@ -73,6 +74,8 @@ export class TabStrip<K extends string> {
             if (spec.icon) setIcon(button.createSpan({ cls: 'tv-tabs__icon' }), spec.icon);
             button.createSpan({ cls: 'tv-tabs__label', text: spec.label });
             button.addEventListener('click', () => this.select(spec.id));
+            // A tab shows another pane: what is typed stays in its field, read or not.
+            showsOnly(button);
             button.addEventListener('keydown', (e) => this.onKey(e, spec.id));
             const pane = panes.createDiv({ cls: 'tv-tabs__pane' });
             pane.setAttribute('role', 'tabpanel');

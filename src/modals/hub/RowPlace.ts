@@ -2,6 +2,7 @@ import { setIcon, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { FieldFocus } from '../../utils/FieldFocus';
 import { placeFocus } from '../../views/sharedUI/FocusPlacement';
+import { takesTyped } from '../../views/sharedUI/PressCommit';
 import { IssueBoard } from '../form/FormIssue';
 import { SendFields } from '../noteops/SendFields';
 import type { SendSurface, SendViewState } from '../noteops/SendDialog';
@@ -64,6 +65,8 @@ export class RowPlace implements HubPlace, SendSurface {
         });
         setIcon(button, 'pencil');
         button.addEventListener('click', () => { void this.host.beginMove('here'); });
+        // The move begins by saving what is typed (`RowHost.beginMove`).
+        takesTyped(button);
         return button;
     }
 

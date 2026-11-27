@@ -7,6 +7,7 @@ import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { toDisplayTask } from '../../services/display/DisplayTaskConverter';
 import { OverlayShell, type OverlayFrame } from '../../views/sharedUI/OverlayShell';
+import { leavePresses } from '../../views/sharedUI/PressCommit';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
@@ -318,6 +319,8 @@ export class TaskHubPanel {
             beforeClose: () => ((this.source?.beforeClose() ?? true) ? this.form?.beforeClose() ?? 'close' : 'stay'),
             yieldsEscape: () => this.source?.yieldsEscape() ?? false,
             takesBack: () => this.source?.takesBack() ?? false,
+            // A button pressed with a field typed in commits the field first, as its Enter does, and leaves it the focus.
+            holdsPresses: true,
         });
 
         this.host.attach({
@@ -339,6 +342,8 @@ export class TaskHubPanel {
         const toggle = makeSource ? frame.head.createDiv() : null;
         const shut = makeSource ? bodyEl.createDiv() : null;
         const card = bodyEl.createDiv({ cls: 'task-hub__preview' });
+        // The card's controls are the card's own, as on a view.
+        leavePresses(card);
         this.previewEl = card;
         const pane = makeSource ? bodyEl.createDiv() : null;
         const formHost = bodyEl.createDiv({ cls: 'task-hub__form' });
