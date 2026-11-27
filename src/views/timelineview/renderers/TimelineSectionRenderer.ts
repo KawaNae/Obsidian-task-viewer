@@ -2,7 +2,6 @@ import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
-import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import type { TimelineOverlapMode } from '../../../types';
@@ -12,7 +11,7 @@ import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
 import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
 import type { CardReconciler } from '../../sharedUI/CardReconciler';
-import { appendEmptySpaceMenuItems } from '../../sharedLogic/EmptySpaceActions';
+import { bindDaySpace } from '../../sharedUI/DaySpace';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
@@ -341,18 +340,15 @@ export class TimelineSectionRenderer {
         }
     }
 
-    /** Adds click/context listeners for creating new tasks. */
+    /**
+     * Make a day's column the day's empty space: a press knows the time
+     * under it, and the menu offers the timers on the day too.
+     */
     public addCreateTaskListeners(col: HTMLElement, date: string) {
-        TouchLongPressBinder.bind(col, {
-            getThreshold: () => this.plugin.settings.longPressThreshold,
-            targetCheck: (t) => t === col,
-            onLongPress: (x, y) => {
-                const rect = col.getBoundingClientRect();
-                this.showEmptySpaceMenu(x, y, y - rect.top, date);
-            },
-            onContextMenu: (e) => {
-                this.showEmptySpaceMenu(e.pageX, e.pageY, e.offsetY, date);
-            },
+        bindDaySpace(col, this.plugin, {
+            date,
+            minutesAt: (offsetY) => this.minutesAt(offsetY),
+            timers: true,
         });
     }
 
@@ -363,12 +359,5 @@ export class TimelineSectionRenderer {
      */
     private minutesAt(offsetY: number): number {
         return (this.plugin.settings.startHour * 60) + offsetY / this.getZoomLevel();
-    }
-
-    /** Show context menu for empty space click */
-    private showEmptySpaceMenu(x: number, y: number, offsetY: number, date: string) {
-        this.plugin.menuPresenter.present((menu) => {
-            appendEmptySpaceMenuItems(menu, this.plugin, date, this.minutesAt(offsetY));
-        }, { kind: 'position', x, y });
     }
 }

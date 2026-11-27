@@ -1,9 +1,8 @@
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
-import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinder';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import type { DisplayTask } from '../../types';
-import { appendEmptySpaceMenuItems } from '../sharedLogic/EmptySpaceActions';
+import { bindDaySpace } from './DaySpace';
 import { drawDateGridLane } from './DateGridLane';
 import type { CardReconciler } from './CardReconciler';
 
@@ -37,20 +36,12 @@ export class AllDaySectionRenderer {
         }, { taskRenderer: this.taskRenderer, settings: this.plugin.settings, reconciler });
     }
 
-    /** Add context menu listeners to AllDay section cell */
+    /**
+     * Make a day's cell, which spans the row under its cards, the day's
+     * empty space: a press knows the day alone, and the menu offers the
+     * timers on the day too.
+     */
     public addEmptySpaceContextMenu(cell: HTMLElement, date: string) {
-        TouchLongPressBinder.bind(cell, {
-            getThreshold: () => this.plugin.settings.longPressThreshold,
-            targetCheck: (t) => t === cell,
-            onLongPress: (x, y) => this.showEmptySpaceMenu(x, y, date),
-            onContextMenu: (e) => this.showEmptySpaceMenu(e.pageX, e.pageY, date),
-        });
-    }
-
-    /** Show context menu for empty space click */
-    private showEmptySpaceMenu(x: number, y: number, date: string) {
-        this.plugin.menuPresenter.present((menu) => {
-            appendEmptySpaceMenuItems(menu, this.plugin, date);
-        }, { kind: 'position', x, y });
+        bindDaySpace(cell, this.plugin, { date, timers: true });
     }
 }

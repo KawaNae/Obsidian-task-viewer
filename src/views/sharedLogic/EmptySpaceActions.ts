@@ -3,9 +3,9 @@
  * that day's daily note, create one in a note the user chooses, or start a
  * timer against the day itself.
  *
- * Timeline's timed lane and the all-day lane both offer this menu; they
- * differ only in whether the press knows a time, which the task to create
- * starts at.
+ * Timeline's timed lane and the all-day lane offer both; they differ only
+ * in whether the press knows a time, which the task to create starts at.
+ * The element that opens the menu is bound in `DaySpace`.
  */
 
 import type { Menu } from 'obsidian';
@@ -78,14 +78,14 @@ function seedAt(date: string, minutes?: number): DraftSeed {
 }
 
 /**
- * Fill in the empty-space context menu for a press on the column of `date`,
- * at `minutes` after its midnight on the timed lane (see {@link seedAt}).
- * Both lanes show the same items in the same order: the two ways to create
- * a task, then the two timers on the day.
+ * Add the two ways to create a task from a press on the column of `date`, at
+ * `minutes` after its midnight where the press knows a time (see
+ * {@link seedAt}): in that day's daily note, then in a note the user
+ * chooses in the hub.
  */
-export function appendEmptySpaceMenuItems(
+export function appendCreateItems(
     menu: Menu,
-    plugin: PluginContext & TimerHost,
+    plugin: PluginContext,
     date: string,
     minutes?: number,
 ): void {
@@ -100,9 +100,14 @@ export function appendEmptySpaceMenuItems(
             .setIcon('file-plus')
             .onClick(() => openDraftHubInNote(plugin, date, minutes));
     });
+}
 
-    menu.addSeparator();
-
+/** Add the two timers on the day of `date` (see {@link startDailyNoteTimer}): a count-up, then a pomodoro. */
+export function appendDayTimerItems(
+    menu: Menu,
+    plugin: PluginContext & TimerHost,
+    date: string,
+): void {
     menu.addItem((item) => {
         item.setTitle(t('menu.startCountupForDailyNote'))
             .setIcon('clock')

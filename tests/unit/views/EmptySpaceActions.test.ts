@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-    appendEmptySpaceMenuItems,
     openDraftHubForDailyNote,
     openDraftHubInNote,
     startDailyNoteTimer,
 } from '../../../src/views/sharedLogic/EmptySpaceActions';
+import { appendDaySpaceMenuItems } from '../../../src/views/sharedUI/DaySpace';
 import { t } from '../../../src/i18n';
 import type { PluginContext } from '../../../src/PluginContext';
 import type { TimerHost } from '../../../src/timer/TimerWidget';
@@ -114,12 +114,12 @@ interface RecordedItem {
     onClick(fn: () => void): RecordedItem;
 }
 
-describe('appendEmptySpaceMenuItems', () => {
+describe('appendDaySpaceMenuItems on Timeline', () => {
     /** The menu of a press on the timed lane (a time known) or the all-day lane (none). */
     function build(minutes?: number) {
         const r = makePlugin();
         const menu = new RecordedMenu();
-        appendEmptySpaceMenuItems(menu.asMenu(), r.plugin, '2026-08-22', minutes);
+        appendDaySpaceMenuItems(menu.asMenu(), r.plugin, { date: '2026-08-22', timers: true }, minutes);
         return { ...r, menu };
     }
 
