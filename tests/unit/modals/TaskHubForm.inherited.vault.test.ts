@@ -4,8 +4,8 @@ import { openMoveHub, stubMoveHubGlobals, settle, tick } from '../helpers/moveHu
 
 /**
  * A row's own date and color emptied in the hub's fields while its section
- * gives a value of the same field: what is written to the note, and what
- * the field shows once the row is read again. The host, the form and the
+ * gives a value of the same field: what is written to the note, what is
+ * said under the field, and what the field and the color's swatch show. The host, the form and the
  * vault are real (`openMoveHub`).
  */
 
@@ -41,6 +41,17 @@ describe('a row\'s own start date emptied under a section that gives one', () =>
     });
 });
 
+describe('a row\'s own start date emptied, its time kept, under a section that gives a date', () => {
+    it('writes the start as the time alone, the day the section\'s, and says nothing under the field', async () => {
+        const h = await open(['# Tasks', '- tv-start:: 2026-12-01', '- [ ] Row @2026-11-26T10:00', '# Done', '']);
+        await empty(h, 'start', 'end');
+        expect(rowSays(h)).toEqual([]);
+        expect(h.lines()[2]).toBe('- [ ] Row @10:00');
+        expect(h.host.task()).toMatchObject({ startTime: '10:00', cascadeContext: { startDate: '2026-12-01' } });
+        expect(h.field('start').placeholder).toBe('2026-12-01');
+    });
+});
+
 describe('a row\'s own color emptied', () => {
     it('takes the row\'s color line out, whether its section gives a color or not', async () => {
         for (const above of [['- tv-color:: blue'], []]) {
@@ -49,5 +60,22 @@ describe('a row\'s own color emptied', () => {
             expect(h.lines(), above.join()).toEqual(['# Tasks', ...above, '- [ ] Row', '# Done', '']);
             expect(h.field('color').value, above.join()).toBe('');
         }
+    });
+});
+
+describe('the color\'s swatch under a section that gives a color', () => {
+    const swatch = (h: Hub) => h.root.find('task-hub__color-swatch')!.style.backgroundColor;
+
+    it('shows nothing for a row that says it has no color', async () => {
+        const h = await open(['# Tasks', '- tv-color:: blue', '- [ ] Row', '    - tv-color::', '# Done', '']);
+        expect(swatch(h)).toBe('transparent');
+    });
+
+    it('shows the row\'s own color, and the section\'s while the field is emptied, before it is committed', async () => {
+        const h = await open(['# Tasks', '- tv-color:: blue', '- [ ] Row', '    - tv-color:: red', '# Done', '']);
+        expect(swatch(h)).toBe('red');
+        h.field('color').focus();
+        h.field('color').type('');
+        expect(swatch(h)).toBe('blue');
     });
 });

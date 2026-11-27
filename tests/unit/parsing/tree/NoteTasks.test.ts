@@ -214,7 +214,7 @@ describe('NoteTasks', () => {
     });
 
     describe('値のない値と読めない値', () => {
-        it('タスクの値のない組み込みのキーは、節の値を隠す', () => {
+        it('タスクの値のない組み込みのキーは、節の値を隠す。節の値はタスクに届いたまま', () => {
             const tasks = extractTasks([
                 '## Section',
                 '- tv-color:: ff0000',
@@ -226,7 +226,7 @@ describe('NoteTasks', () => {
             ]);
             expect(tasks[0].color).toBeNull();
             expect(tasks[0].mask).toBeNull();
-            expect(tasks[0].cascadeContext?.color).toBeUndefined();
+            expect(tasks[0].cascadeContext?.color).toBe('ff0000');
             expect(getEffectiveColor(tasks[0])).toBeUndefined();
             expect(getEffectiveMask(tasks[0])).toBeUndefined();
             expect(getEffectiveLinestyle(tasks[0])).toBe('dashed');
@@ -1035,38 +1035,15 @@ describe('NoteTasks の名前', () => {
 });
 
 /**
- * What a row inherits of what its section gives (`NoteTasks.inheritedBy`):
- * the dates and style it says itself, with a value or with none, are its
- * own; an empty date says none; tags and properties go through whole. The
- * reading gives each row what this says.
+ * What the layers above give a row (`cascadeContext`): every value its
+ * section resolves to, whether the row says the same field itself or not;
+ * the row's own, a value or none, stands over it as the readers take it.
  */
-describe('NoteTasks.inheritedBy', () => {
-    const given = {
-        startDate: '2031-02-01', startTime: '10:00', due: '2031-02-10',
-        color: 'red', linestyle: 'dashed', mask: '***',
-        tags: ['ft'], properties: { area: { key: 'area', value: { type: 'text' as const, text: 'lab', spelling: 'lab' } } },
-    };
-
-    it('leaves out each date and style the row says, with a value or with none, and keeps tags and properties', () => {
-        expect(NoteTasks.inheritedBy({ startDate: '2031-03-01', color: null, mask: '' }, given)).toEqual({
-            startTime: '10:00', due: '2031-02-10', linestyle: 'dashed', mask: '***',
-            tags: ['ft'], properties: given.properties,
-        });
-    });
-
-    it('takes an empty date as no say, and leaves what it was given as it was', () => {
-        const before = structuredClone(given);
-        expect(NoteTasks.inheritedBy({ startDate: '', due: undefined }, given)).toEqual(given);
-        expect(given).toEqual(before);
-    });
-
-    it('is nothing once the row says every one and nothing goes through', () => {
-        expect(NoteTasks.inheritedBy({ startDate: '2031-03-01' }, { startDate: '2031-02-01' })).toBeUndefined();
-        expect(NoteTasks.inheritedBy({}, {})).toBeUndefined();
-    });
-
-    it('is what the reading gives a row: the section\'s values less what the row says', () => {
-        const [row] = extractTasks(['# h', '- tv-start:: 2031-02-01', '- tv-color:: red', '- tv-linestyle:: dashed', '- [ ] t @2031-03-01', '    - tv-color::']);
-        expect(row.cascadeContext).toEqual({ linestyle: 'dashed' });
+describe('what a row is given of its section', () => {
+    it('is the section\'s values whatever the row says itself, and the row\'s own is what shows', () => {
+        const [row, bare] = extractTasks(['# h', '- tv-start:: 2031-02-01', '- tv-color:: red', '- tv-linestyle:: dashed', '- [ ] t @2031-03-01', '    - tv-color::', '- [ ] u']);
+        expect(row.cascadeContext).toEqual({ startDate: '2031-02-01', color: 'red', linestyle: 'dashed' });
+        expect(row.cascadeContext).toEqual(bare.cascadeContext);
+        expect([row.startDate, getEffectiveColor(row), getEffectiveLinestyle(row)]).toEqual(['2031-03-01', undefined, 'dashed']);
     });
 });

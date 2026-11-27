@@ -167,6 +167,21 @@ describe('the hub\'s form', () => {
         ].join('\n'));
     });
 
+    it('writes a start of its time alone once its own date is emptied under a heading that gives a date, saying nothing, the heading\'s date shown faint', async () => {
+        const inherited = ['# 見出し', '- tv-start:: 2026-12-01', '- [ ] 親 @2026-11-26T10:00', '- [ ] 次', ''].join('\n');
+        await writeIndexedTestFile(TEST_FILE, inherited);
+        openHub('親');
+        const shown = run<Record<string, unknown>>(`
+            const date = dateInput(${JSON.stringify(START())}, 'date');
+            type(date, '');
+            await leave(date);
+            const time = dateInput(${JSON.stringify(START())}, 'time');
+            return JSON.stringify({ date: date.value, faint: date.placeholder, time: time.value, says: says(date) });
+        `);
+        expect(shown).toEqual({ date: '', faint: '2026-12-01', time: '10:00', says: [] });
+        expect(readTestFile(TEST_FILE)).toBe(['# 見出し', '- tv-start:: 2026-12-01', '- [ ] 親 @10:00', '- [ ] 次', ''].join('\n'));
+    });
+
     it('says why a line style does not read, under its row, and saves nothing', async () => {
         openHub('親');
         const said = run<Record<string, unknown>>(`

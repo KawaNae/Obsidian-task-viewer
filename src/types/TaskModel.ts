@@ -199,9 +199,11 @@ export interface Task {
      * the Task alone, so they merge via the `getEffective*` derived helpers
      * (`services/data/EffectiveProperties.ts`).
      *
-     * It holds the values the row inherits: a built-in a section hides with
-     * no value (`- tv-color::`) is not here, as one no layer says is not
-     * (where it was hidden is `inheritedFrom`). A custom property hidden so
+     * It holds the values the layers above give the row, whether the row
+     * says the same field itself or not: the row's own value, or its own
+     * none, stands over the one here, as the merges above read them. A
+     * built-in a section hides with no value (`- tv-color::`) is not here,
+     * as one no layer says is not (where it was hidden is `inheritedFrom`). A custom property hidden so
      * is here with its value null, which the API puts out as null.
      */
     cascadeContext?: {
