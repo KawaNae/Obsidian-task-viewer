@@ -1,6 +1,6 @@
 import { t } from '../../i18n';
 import type { Task } from '../../types';
-import type { ValueSource } from '../../services/parsing/tree/Sections';
+import type { ScalarField, ValueSource } from '../../services/parsing/tree/Sections';
 import { PropertyKey } from '../../services/parsing/utils/PropertyKey';
 import type { LineTarget } from './SourceLine';
 
@@ -29,6 +29,27 @@ export class CascadeSource {
         const from = task.inheritedFrom?.fields[field];
         if (task.cascadeContext?.[field] === undefined && !from) return null;
         return kindOf(from);
+    }
+
+    /**
+     * Where what the layers above give a built-in (a date, a time, the due,
+     * a style) is written, whether or not the row's own value wins over it:
+     * the layer whose value won, or that hides the one above it with no
+     * value. Null when no layer gives it anything.
+     */
+    static forField(task: Task, field: ScalarField): CascadeSourceKind | null {
+        const from = task.inheritedFrom?.fields[field];
+        if (task.cascadeContext?.[field] === undefined && !from) return null;
+        return kindOf(from);
+    }
+
+    /**
+     * The line what the layers above give a built-in is written on
+     * (`frontmatterKey` the key the settings name for it: a time's is its
+     * date's), to open in the editor; null when no layer is recorded for it.
+     */
+    static lineOfField(task: Task, field: ScalarField, frontmatterKey: string): LineTarget | null {
+        return targetOf(task.inheritedFrom?.fields[field], frontmatterKey);
     }
 
     /** cascade 由来タグ 1 件の出所: そのタグを最初に加えた層 */

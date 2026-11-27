@@ -176,7 +176,20 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     input.addEventListener('compositionend', check, { signal });
     input.addEventListener('blur', commit, { signal });
     onFormEnter(input, commit, { takesEnter: opts.takesEnter, signal });
-    ownCommit(input, { typed: () => pending() !== null, commit }, signal);
+    const discard = (): void => {
+        writing = null;
+        typedOver = false;
+        const text = shownValue();
+        if (input.value !== text) put(text);
+        given = text;
+        opts.issues(null);
+    };
+    ownCommit(input, {
+        typed: () => pending() !== null,
+        commit,
+        // Typed over what it was last given: a text not handed on.
+        drop: () => { if (input.value !== given) discard(); },
+    }, signal);
 
     return {
         pending,
@@ -190,13 +203,6 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
             opts.issues(null);
         },
         commit,
-        discard(): void {
-            writing = null;
-            typedOver = false;
-            const text = shownValue();
-            if (input.value !== text) put(text);
-            given = text;
-            opts.issues(null);
-        },
+        discard,
     };
 }

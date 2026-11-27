@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { carryPressKeys, commitOf, holdPresses, leavePresses, ownCommit, pressKey, pressUnderWay, takesTyped } from '../../../src/views/sharedUI/PressCommit';
+import { carryPressKeys, commitOf, holdPresses, leavePresses, menuOver, ownCommit, pressKey, pressUnderWay, takesTyped } from '../../../src/views/sharedUI/PressCommit';
 import { bindField } from '../../../src/modals/form/bindField';
 import { FocusDoc, asEl, type FocusEl } from '../helpers/focusDom';
 
@@ -78,6 +78,58 @@ describe('a surface that holds the presses on its buttons', () => {
         expect(pressed).toEqual(['close']);
         expect(commits).toBe(0);
         expect(doc.activeElement).toBe(field);
+    });
+
+    it('opens a field\'s menu over the field whose text is refused, the text left as typed, and no menu over another field', () => {
+        const doc = new FocusDoc();
+        const panel = doc.root();
+        holdPresses(asEl(panel));
+        let value = 'a';
+        const writes: string[] = [];
+        const field = (at: string) => {
+            const input = panel.createEl('input', { type: 'text' });
+            input.value = value;
+            bindField(asEl(input), {
+                codec: { read: (text: string) => (text === 'bad' ? { ok: false as const, issue: { kind: 'format', format: 'x' } as never } : { ok: true as const, value: text }), show: (v: string) => v },
+                current: () => value,
+                commit: (next: string) => { value = next; writes.push(`${at} ${next}`); },
+                issues: () => { },
+            });
+            return input;
+        };
+        const own = field('own');
+        const other = field('other');
+        const pressed: string[] = [];
+        const menu = (name: string, over: FocusEl) => {
+            const el = panel.createEl('button');
+            menuOver(asEl(el), () => [asEl(over)]);
+            el.addEventListener('click', () => pressed.push(name));
+            return el;
+        };
+        const ownMenu = menu('own menu', own);
+        own.focus();
+        own.type('bad');
+        ownMenu.press();
+        expect(pressed).toEqual(['own menu']);
+        expect([own.value, writes]).toEqual(['bad', []]);
+        expect(doc.activeElement).toBe(own);
+        // What a menu item that puts a value does first: the text refused is thrown away.
+        commitOf(asEl(own))!.drop!();
+        expect(own.value).toBe('a');
+        other.focus();
+        other.type('bad');
+        ownMenu.press();
+        expect(pressed).toEqual(['own menu']);
+        expect(other.value).toBe('bad');
+    });
+
+    it('throws away nothing a commit handed on as a menu item drops what is typed', () => {
+        const s = surface();
+        s.field.focus();
+        s.field.type('b');
+        commitOf(asEl(s.field))!.commit();
+        commitOf(asEl(s.field))!.drop!();
+        expect([s.field.value, s.writes]).toEqual(['b', ['b']]);
     });
 
     it('reads no press in a part that keeps its own', () => {
