@@ -17,10 +17,12 @@ describe('EffectiveProperties', () => {
 
         it('raw があれば cascade を隠す', () => {
             const t = makeTask({
-                color: '00ff00',
-                cascadeContext: { color: 'ff0000' },
+                color: '00ff00', linestyle: 'dotted', mask: '##',
+                cascadeContext: { color: 'ff0000', linestyle: 'dashed', mask: '***' },
             });
             expect(getEffectiveColor(t)).toBe('00ff00');
+            expect(getEffectiveLinestyle(t)).toBe('dotted');
+            expect(getEffectiveMask(t)).toBe('##');
         });
 
         it('raw の値なし (null) は cascade を隠す', () => {
