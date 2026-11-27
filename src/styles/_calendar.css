@@ -20,6 +20,24 @@
     container-name: calendar-view;
 }
 
+/* --- A day's empty space ---
+   Spans the day's column over every track of the row, under the day's
+   header and the cards, and draws nothing. The header lets a press through
+   to it but on what in it acts on a hover or a press: the day's link (its
+   note, its preview) and the moon phase (its tooltip). */
+.cal-day-space {
+    grid-row: 1 / -1;
+}
+
+.calendar-view .cal-day-cell {
+    pointer-events: none;
+}
+
+.calendar-view .cal-day-cell .internal-link,
+.calendar-view .cal-day-cell .moon-phase-inline {
+    pointer-events: auto;
+}
+
 /* --- Calendar task card (grid positioned, scoped to week-row) --- */
 .cal-week-row > .task-card {
     box-sizing: border-box;
