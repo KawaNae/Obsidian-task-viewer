@@ -55,7 +55,8 @@ import {
  * 同じ答え）を拒む。読めないキーは欄の下に理由を出して足さない。確定の
  * 3 つの道（blur、Enter、閉じるときの保存）は同じ読みを通り、閉じるときは
  * 読めないキーを保存できない値として出す（`unsaved`）。理由は打ち直すと
- * 消え、ほかの欄の確定では消えない。行の増減で組み直しても、追加行の
+ * 消え、ほかの欄の確定では消えない。追加行にフォーカスがあるまま足すと
+ * （Enter、値の候補を選ぶ）、組み直した追加行のキーの欄にフォーカスを置く。行の増減で組み直しても、追加行の
  * 打ちかけの字は残す。足す書き込みが拒まれ、ホストが打った字を欄に残して
  * よいと答えたら（`HubHost.put`）、打った字を追加行に戻す。
  *
@@ -224,6 +225,9 @@ export class PropertiesFieldGroup implements ClosingPart {
         /**
          * Add what the row holds: false when its key does not read (said
          * under it), true once added, or with no key typed (nothing to add).
+         * Added with the focus in the row (its Enter, a value picked), the
+         * focus goes to the key field of the row built anew, for the next
+         * property; a blur's commit leaves it where it went.
          */
         const commitAdd = (): boolean => {
             const key = readKey();
@@ -232,9 +236,12 @@ export class PropertiesFieldGroup implements ClosingPart {
             const value = PropertyValueInput.read(valueInput.value);
             if (!value.ok) return false;
             const typed = { key: keyInput.value, value: valueInput.value };
+            const active = keyInput.ownerDocument.activeElement;
+            const inRow = active === keyInput || active === valueInput;
             const write = this.setValue(key.value, value.value, 'propKey');
             this.draft = { key: '', value: '' };
             this.render(true);
+            if (inRow) this.addRow?.keyInput.focus();
             void write?.then((written) => {
                 // Refused where it may be taken once added again: what was
                 // typed is the add row's again, unless something was typed

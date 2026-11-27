@@ -107,7 +107,7 @@ function setUp(properties: Properties = {}, opts: SetUpOptions = {}) {
 }
 
 describe('PropertiesFieldGroup built anew while an input holds the focus', () => {
-    it('adds the property typed in the add row on Enter: written once, the add row emptied', () => {
+    it('adds the property typed in the add row on Enter: written once, the add row emptied, the focus in its key field', () => {
         const s = setUp();
         s.addKey().focus();
         s.addKey().type('memo2');
@@ -115,6 +115,22 @@ describe('PropertiesFieldGroup built anew while an input holds the focus', () =>
         expect(s.writes.map(valuesOf)).toEqual([{ memo2: { type: 'null', spelling: '' } }]);
         expect(s.addKey().value).toBe('');
         expect(s.root.findAll('task-hub__prop-add')).toHaveLength(1);
+        expect(s.doc.activeElement).toBe(s.addKey());
+    });
+
+    it('puts the focus in the add row\'s key field once a property is added by the value field\'s Enter, and leaves it where it went once added by a blur', () => {
+        const s = setUp();
+        s.addKey().focus();
+        s.addKey().type('memo2');
+        s.addValue().focus();
+        s.addValue().type('v');
+        s.addValue().enter();
+        expect(s.writes.map(valuesOf)).toEqual([{ memo2: { type: 'text', text: 'v', spelling: 'v' } }]);
+        expect(s.doc.activeElement).toBe(s.addKey());
+        s.addKey().type('memo3');
+        s.leave();
+        expect(s.writes).toHaveLength(2);
+        expect(s.doc.activeElement).not.toBe(s.addKey());
     });
 
     it('saves the add row as the hub closes with the focus in it: written once, and the lists saved after it', () => {
