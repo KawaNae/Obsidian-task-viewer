@@ -14,6 +14,10 @@
  * - A text value's × pressed with another text value typed over: both
  *   written, the focus in the field typed in; nothing typed, the focus
  *   stays all the same.
+ * - A list's item × pressed with another property's value in focus, typed
+ *   over or not: the item taken out, what is typed written first, and the
+ *   focus and its caret left in the value, built anew with the rows. On a
+ *   task not written yet too.
  * - The close pressed near its lower edge with a key typed in the add row:
  *   the hub closes, the key written once. The row the commit of a blur
  *   would add makes the panel taller and moves the close from under the
@@ -104,6 +108,12 @@ const nameInput = () => hub()?.querySelector('.tv-form__name-section input') ?? 
  * the panel takes the focus from wherever it is, a field typed in too.
  */
 const opened = () => until(() => nameInput() && document.activeElement === nameInput());
+const text = t => ({ type: 'text', text: t, spelling: t });
+/** The hub on a task not written yet, on the daily note of a day far off, holding \`properties\`. */
+const openDraft = async properties => {
+    plugin.openDraftHub(plugin.getCreatePlaces().dailyNote(${JSON.stringify(DRAFT_DAY)}), { startDate: ${JSON.stringify(DRAFT_DAY)}, properties });
+    await opened();
+};
 /** The row's hub, opened and on the tab \`tab\`. */
 const openRow = async (name, tab = 'basic') => {
     const task = plugin.getIndex().getTasks().find(t => t.file === FILE && t.content.startsWith(name));
@@ -250,6 +260,28 @@ describe('a button pressed with another field typed in', () => {
         expect(out).toEqual({ focused: true, writes: 1, disk: withLines(6, 7, '\t- summary::') });
     });
 
+    /** The text value memo in focus, typed over with `typed` or not, its caret after the first letter, and the list's item × pressed. */
+    const itemOutOverValue = (typed: string | null) => run<Record<string, unknown>>(`
+        await openRow('親', 'detail');
+        ${typed === null ? `focusIn(valueInput('memo'));` : `typeIn(valueInput('memo'), ${JSON.stringify(typed)});`}
+        valueInput('memo').setSelectionRange(1, 1);
+        watchWrites();
+        press(itemClear('links', '議事録'));
+        await until(() => !items('links').includes('議事録'), 3000, () => items('links').join('|'));
+        return JSON.stringify(await settled(() => {
+            const value = valueInput('memo');
+            return { items: items('links'), memo: value.value, focused: document.activeElement === value, caret: value.selectionStart };
+        }));
+    `);
+
+    it('a list\'s item ×, another property\'s value in focus with nothing typed: the item out, the focus and its caret in the value', () => {
+        expect(itemOutOverValue(null)).toEqual({ items: ['企画書'], memo: '短い', focused: true, caret: 1, writes: 1, disk: withLines(3, 5, '\t\t- 企画書') });
+    });
+
+    it('a list\'s item ×, another property\'s value typed over: both written, the focus and its caret in the value', () => {
+        expect(itemOutOverValue('短いX')).toEqual({ items: ['企画書'], memo: '短いX', focused: true, caret: 1, writes: 2, disk: withLines(3, 6, '\t\t- 企画書', '\t- memo:: 短いX') });
+    });
+
     it('the close pressed near its lower edge, a key typed in the add row: the hub closes, the key written once', () => {
         const out = run<Record<string, unknown>>(`
             await openRow('次', 'detail');
@@ -321,16 +353,36 @@ describe('the add row\'s Enter', () => {
 describe('a button pressed on a task not written yet', () => {
     it('a list\'s item ×, an item typed in the list\'s add field: the draft holds the item typed and not the item pressed, the add field empty and in focus', () => {
         const out = run<Record<string, unknown>>(`
-            const text = t => ({ type: 'text', text: t, spelling: t });
-            const properties = { links: { key: 'links', value: { type: 'list', items: [text('企画書'), text('議事録')] } } };
-            plugin.openDraftHub(plugin.getCreatePlaces().dailyNote(${JSON.stringify(DRAFT_DAY)}), { startDate: ${JSON.stringify(DRAFT_DAY)}, properties });
-            await opened();
+            await openDraft({ links: { key: 'links', value: { type: 'list', items: [text('企画書'), text('議事録')] } } });
             typeIn(addItem('links'), 'zz');
             press(itemClear('links', '議事録'));
             await until(() => !items('links').includes('議事録'), 3000, () => items('links').join('|'));
             return JSON.stringify({ items: items('links'), add: addItem('links').value, focused: document.activeElement === addItem('links') });
         `);
         expect(out).toEqual({ items: ['企画書', 'zz'], add: '', focused: true });
+    });
+
+    /** The draft holding the list and a text value, the value in focus, typed over with `typed` or not, its caret after the first letter, and the list's item × pressed. */
+    const itemOutOverValue = (typed: string | null) => run<Record<string, unknown>>(`
+        await openDraft({
+            links: { key: 'links', value: { type: 'list', items: [text('企画書'), text('議事録')] } },
+            note1: { key: 'note1', value: text('短い') },
+        });
+        ${typed === null ? `focusIn(valueInput('note1'));` : `typeIn(valueInput('note1'), ${JSON.stringify(typed)});`}
+        valueInput('note1').setSelectionRange(1, 1);
+        press(itemClear('links', '議事録'));
+        await until(() => !items('links').includes('議事録'), 3000, () => items('links').join('|'));
+        await nextFrame();
+        const value = valueInput('note1');
+        return JSON.stringify({ items: items('links'), note1: value.value, focused: document.activeElement === value, caret: value.selectionStart });
+    `);
+
+    it('a list\'s item ×, another property\'s value in focus with nothing typed: the item out, the focus and its caret in the value', () => {
+        expect(itemOutOverValue(null)).toEqual({ items: ['企画書'], note1: '短い', focused: true, caret: 1 });
+    });
+
+    it('a list\'s item ×, another property\'s value typed over: the draft holds both, the focus and its caret in the value', () => {
+        expect(itemOutOverValue('短いX')).toEqual({ items: ['企画書'], note1: '短いX', focused: true, caret: 1 });
     });
 });
 
