@@ -21,26 +21,38 @@ export interface DaySpace {
     minutesAt?: (offsetY: number) => number;
     /** Whether the menu offers the timers on the day after the creates. */
     timers: boolean;
+    /**
+     * Elements drawn over the space that take a press for a hover of their
+     * own (a tooltip) and are the day's empty space for a right click or a
+     * long press all the same, anywhere in them.
+     */
+    covers?: HTMLElement[];
 }
 
 /**
- * Open the day's menu from a right click or a long press on `el` itself; a
- * press that lands on a card or a link inside it is theirs. Both read the
- * point the same way, from its viewport coordinates.
+ * Open the day's menu from a right click or a long press on `el` itself, or
+ * in one of the space's covers; a press that lands on a card or a link
+ * inside it is theirs. Both read the point the same way, from its viewport
+ * coordinates, down `el`.
  */
 export function bindDaySpace(el: HTMLElement, plugin: PluginContext & TimerHost, space: DaySpace): void {
-    TouchLongPressBinder.bind(el, {
-        getThreshold: () => plugin.settings.longPressThreshold,
-        targetCheck: (t) => t === el,
-        onLongPress: (x, y) => {
-            // A point on the top border is read as the padding box's top edge,
-            // so that the time under it is the column's first minute.
-            const minutes = space.minutesAt?.(Math.max(0, y - el.getBoundingClientRect().top - el.clientTop));
-            plugin.menuPresenter.present((menu) => {
-                appendDaySpaceMenuItems(menu, plugin, space, minutes);
-            }, { kind: 'position', x, y });
-        },
-    });
+    const open = (x: number, y: number) => {
+        // A point on the top border is read as the padding box's top edge,
+        // so that the time under it is the column's first minute.
+        const minutes = space.minutesAt?.(Math.max(0, y - el.getBoundingClientRect().top - el.clientTop));
+        plugin.menuPresenter.present((menu) => {
+            appendDaySpaceMenuItems(menu, plugin, space, minutes);
+        }, { kind: 'position', x, y });
+    };
+    const getThreshold = () => plugin.settings.longPressThreshold;
+    TouchLongPressBinder.bind(el, { getThreshold, targetCheck: (t) => t === el, onLongPress: open });
+    for (const cover of space.covers ?? []) {
+        TouchLongPressBinder.bind(cover, {
+            getThreshold,
+            targetCheck: (t) => t instanceof Node && cover.contains(t),
+            onLongPress: open,
+        });
+    }
 }
 
 /**

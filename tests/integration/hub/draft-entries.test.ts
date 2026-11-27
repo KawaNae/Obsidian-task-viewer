@@ -3,7 +3,9 @@
  * vault, each as a user opens it:
  *
  * - a Timeline's timed lane, its empty space's Create task: on the daily
- *   note of the column's day, the time pressed the start's time;
+ *   note of the column's day, the time pressed the start's time, and the
+ *   column's first minute on its top border, right-clicked as a person
+ *   does (through Electron);
  * - a Timeline's all-day lane, the same: the day alone;
  * - a view's card, its menu's Add child task: under the card's row;
  * - the editor's line button, its menu's Add child task: under the line's
@@ -27,6 +29,7 @@ import { overrideSettings, tr, type HeldSettings } from '../helpers/view-helper'
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { MENUS } from '../helpers/menus';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
+import { REAL_INPUT } from '../helpers/real-input';
 
 const DAY = '2031-01-21';
 const DAILY = `${DAY}.md`;
@@ -64,14 +67,16 @@ const opened = async () => {
     await until(() => lineSays().length > 0);
     return { start: { date: start('date'), time: start('time') }, line: lineSays() };
 };
-/** A Timeline on DAY, its leaf kept to be closed after. */
-const timeline = async () => {
+/** A Timeline on DAY, with \`state\` over its own, its leaf kept to be closed after. */
+const timeline = async (state = {}) => {
     const leaf = app.workspace.getLeaf('tab');
-    await leaf.setViewState({ type: 'timeline-view', state: { date: ${JSON.stringify(DAY)} }, active: true });
+    await leaf.setViewState({ type: 'timeline-view', state: { date: ${JSON.stringify(DAY)}, ...state }, active: true });
     R.tl = leaf;
     return leaf;
 };
-const press = el => {
+${REAL_INPUT}
+/** A \`contextmenu\` dispatched on \`el\`, 5 px in from its top left. */
+const menuOn = el => {
     const r = el.getBoundingClientRect();
     el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 5, clientY: r.top + 5 }));
 };
@@ -155,12 +160,51 @@ describe('the hub on a task not written yet opens from', () => {
         });
     });
 
+    it('a Timeline\'s timed lane right-clicked on its column\'s top border: the column\'s first minute, 00:00 with a start hour of 0', () => {
+        const startHour = overrideSettings({ startHour: 0 });
+        try {
+            const steps = run<{ onColumn: boolean; heard: { onColumn: boolean; offsetY: number } | null; opened: Opened }>(`
+                // An hour is 15 px: the border's pixel, a pixel above the
+                // padding box, is 4 minutes before the column's first, more
+                // than the rounding to 5 minutes takes back.
+                const leaf = await timeline({ zoomLevel: 0.25 });
+                let col = null;
+                await until(() => (col = leaf.view.contentEl.querySelector('.timeline-scroll-area__day-column[data-date="${DAY}"]')));
+                // The column's top in sight, below the sticky header.
+                leaf.view.contentEl.querySelector('.timeline-grid').scrollTop = 0;
+                col.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                await new Promise(requestAnimationFrame);
+                const r = col.getBoundingClientRect();
+                // The first whole pixel down from the column's top: on its top border.
+                const x = Math.round(r.left + r.width / 2), y = Math.ceil(r.top);
+                const onColumn = document.elementFromPoint(x, y) === col;
+                let heard = null;
+                const hear = e => { heard = { onColumn: e.target === col, offsetY: e.offsetY }; };
+                window.addEventListener('contextmenu', hear, true);
+                try {
+                    await press(col, { dy: y - (r.top + r.height / 2), button: 'right' });
+                    await until(() => heard);
+                } finally {
+                    window.removeEventListener('contextmenu', hear, true);
+                }
+                await pick(${JSON.stringify(tr('menu.createTaskForDailyNote'))});
+                return JSON.stringify({ onColumn, heard, opened: await opened() });
+            `);
+            expect(steps.onColumn).toBe(true);
+            // The press is a whole pixel above the padding box, as the browser reads it.
+            expect(steps.heard).toEqual({ onColumn: true, offsetY: -1 });
+            expect(steps.opened.start).toEqual({ date: DAY, time: '00:00' });
+        } finally {
+            startHour.restore();
+        }
+    });
+
     it('a Timeline\'s all-day lane: the column\'s daily note, the day alone', () => {
         const steps = run<Opened>(`
             const leaf = await timeline();
             let cell = null;
             await until(() => (cell = leaf.view.contentEl.querySelector('.allday-section__cell[data-date="${DAY}"]')));
-            press(cell);
+            menuOn(cell);
             await pick(${JSON.stringify(tr('menu.createTaskForDailyNote'))});
             return JSON.stringify(await opened());
         `);
@@ -176,7 +220,7 @@ describe('the hub on a task not written yet opens from', () => {
             const leaf = await timeline();
             const card = () => [...leaf.view.contentEl.querySelectorAll('.task-card')].find(c => c.textContent.includes('親'));
             await until(() => card());
-            press(card());
+            menuOn(card());
             await pick(${JSON.stringify(tr('menu.addChildTask'))});
             return JSON.stringify(await opened());
         `);

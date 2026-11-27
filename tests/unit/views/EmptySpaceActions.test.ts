@@ -161,3 +161,34 @@ describe('appendDaySpaceMenuItems on Timeline', () => {
         ]);
     });
 });
+
+describe('appendDaySpaceMenuItems on the Calendar', () => {
+    /** The menu of a press on a Calendar's day: it knows the day alone and offers no timers. */
+    function build() {
+        const r = makePlugin();
+        const menu = new RecordedMenu();
+        appendDaySpaceMenuItems(menu.asMenu(), r.plugin, { date: '2026-08-22', timers: false });
+        return { ...r, menu };
+    }
+
+    it('offers the two creates alone, with no separator and no timer', () => {
+        const { menu } = build();
+        expect(menu.items.map(i => i.title)).toEqual([
+            t('menu.createTaskForDailyNote'),
+            t('menu.createTaskInNote'),
+        ]);
+        expect(menu.items.map(i => i.icon)).toEqual(['plus', 'file-plus']);
+        expect(menu.separatorAfter).toEqual([]);
+    });
+
+    it('creates on the day alone, in the day\'s daily note or in a note the user chooses', () => {
+        const { menu, opened, started } = build();
+        menu.items[0].click?.();
+        menu.items[1].click?.();
+        expect(opened).toEqual([
+            [DAILY, { startDate: '2026-08-22' }],
+            [null, { startDate: '2026-08-22' }],
+        ]);
+        expect(started).toEqual([]);
+    });
+});

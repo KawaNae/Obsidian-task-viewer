@@ -2,7 +2,7 @@
  * Long-press (touch) と contextmenu (mouse) を統一して扱うバインダ。
  *
  * Task に依存しないので、任意の HTMLElement に長押しで何かを発火する仕組みを付けられる。
- * 既存の TouchEventHandler (Task ハードコード) と TimelineSectionRenderer の自前実装を統合する。
+ * カードのメニュー (MenuHandler) と日の空き (DaySpace) が使う。
  */
 export interface LongPressOptions {
     /** 長押し閾値 (ms)。getter なので設定変更後も最新値を読める */

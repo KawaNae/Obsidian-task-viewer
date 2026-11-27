@@ -31,6 +31,7 @@ import { ViewSidebar } from '../sidebar/ViewSidebar';
 import type { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { drawDateGridLane } from '../sharedUI/DateGridLane';
+import { bindDaySpace } from '../sharedUI/DaySpace';
 import { TaskViewerView } from '../base/TaskViewerView';
 import { viewedDay } from '../base/ViewedDay';
 
@@ -231,8 +232,13 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
                 const cellDate = new Date(cursor);
                 const dateKey = DateUtils.getLocalDateString(cellDate);
                 weekDates.push(dateKey);
-                this.renderDaySpace(weekRow, dateKey, i + 1);
-                this.renderDateHeader(weekRow, cellDate, i + 1, month, today);
+                const space = this.renderDaySpace(weekRow, dateKey, i + 1);
+                const moon = this.renderDateHeader(weekRow, cellDate, i + 1, month, today);
+                // A right click or a long press on the day's empty space, or on
+                // its moon phase, which keeps its tooltip, offers the two ways
+                // to create a task on the day, starting on the day alone; the
+                // timers on the day are Timeline's.
+                bindDaySpace(space, this.plugin, { date: dateKey, timers: false, covers: moon ? [moon] : [] });
                 cursor.setDate(cursor.getDate() + 1);
             }
 
@@ -313,13 +319,14 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         return space;
     }
 
+    /** The day's header in the row's first track, and its moon phase where it is shown. */
     private renderDateHeader(
         weekRow: HTMLElement,
         date: Date,
         colIndex: number,
         referenceMonth: { year: number; month: number },
         todayKey: string,
-    ): void {
+    ): HTMLElement | null {
         const cell = weekRow.createDiv('cal-day-cell');
         const dateKey = DateUtils.getLocalDateString(date);
         const isFirstOfMonth = date.getDate() === 1;
@@ -342,12 +349,13 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             this.state.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
-        if (astronomyDisplay.moonPhase) {
-            attachMoonPhase(headerRow, dateKey, { size: 14, modifier: 'moon-phase-inline--cal' });
-        }
+        const moon = astronomyDisplay.moonPhase
+            ? attachMoonPhase(headerRow, dateKey, { size: 14, modifier: 'moon-phase-inline--cal' })
+            : null;
 
         periodicNoteLink(headerRow, this.periodicLinks(), dailyNotes(this.app), dateKey)
             .createSpan({ cls: 'cal-day-cell__date-label', text: dateLabel });
+        return moon;
     }
 
     /** What the grid's links to the daily and weekly notes open and preview with. */
