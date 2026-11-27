@@ -15,7 +15,8 @@
  *   selection where it was, at the start of a field never focused.
  * - A press (`press`) is a `mousedown`, whose default, unless prevented,
  *   focuses the element, then a `click`, as Chromium's pointer press is;
- *   `blur()` takes the focus to the body.
+ *   an element taken out of the document meanwhile is under the pointer no
+ *   more, and has no click. `blur()` takes the focus to the body.
  * - A field's text is selected (`select`, `setSelectionRange`), and the
  *   field scrolled in itself (`scrollLeft`, `scrollTop`), as an input's.
  * - An event is heard by the listeners put on in the capture phase of the
@@ -23,7 +24,9 @@
  *   bubbles (`bubbles`, as an input and a keydown do) is heard after by the
  *   ancestors' other listeners, from the nearest, and one that does not (a
  *   blur) is not. A listener put on with a `signal` is taken off once the
- *   signal aborts.
+ *   signal aborts; one taken off while the event is on its way is not
+ *   called, as a browser does not call it. The event's `target` is the
+ *   element it is sent to.
  */
 type Listener = (e: Event) => void;
 interface Entry { fn: Listener; capture: boolean }
@@ -199,13 +202,14 @@ export class FocusEl {
 
     /**
      * Pressed as a pointer presses a button: a `mousedown`, whose default,
-     * unless a listener prevents it, focuses the element, then a `click`.
+     * unless a listener prevents it, focuses the element, then a `click`,
+     * unless the element was taken out of the document meanwhile.
      */
     press(): void {
         const down = new Event('mousedown', { bubbles: true, cancelable: true });
         this.dispatchEvent(down);
         if (!down.defaultPrevented) this.focus();
-        this.dispatchEvent(new Event('click', { bubbles: true }));
+        if (this.isConnected) this.dispatchEvent(new Event('click', { bubbles: true }));
     }
 
     addEventListener(type: string, fn: Listener, opts?: ListenerOptions): void {
@@ -222,11 +226,20 @@ export class FocusEl {
         this.listeners.set(type, (this.listeners.get(type) ?? []).filter(e => e.fn !== fn));
     }
     dispatchEvent(e: Event): boolean {
+        if (e.target === null) Object.defineProperty(e, 'target', { value: this });
         const path: FocusEl[] = [];
         for (let at = this.parent; at; at = at.parent) path.unshift(at);
-        for (const el of path) for (const entry of el.listeners.get(e.type) ?? []) if (entry.capture) entry.fn(e);
-        for (const entry of this.listeners.get(e.type) ?? []) entry.fn(e);
-        if (e.bubbles) for (const el of [...path].reverse()) for (const entry of el.listeners.get(e.type) ?? []) if (!entry.capture) entry.fn(e);
+        /** Call `el`'s listeners of the phase, those it still has as each is reached. */
+        const hear = (el: FocusEl, capture: boolean) => {
+            for (const entry of el.listeners.get(e.type) ?? []) {
+                if (entry.capture === capture && (el.listeners.get(e.type) ?? []).includes(entry)) entry.fn(e);
+            }
+        };
+        for (const el of path) hear(el, true);
+        for (const entry of this.listeners.get(e.type) ?? []) {
+            if ((this.listeners.get(e.type) ?? []).includes(entry)) entry.fn(e);
+        }
+        if (e.bubbles) for (const el of [...path].reverse()) hear(el, false);
         return true;
     }
 

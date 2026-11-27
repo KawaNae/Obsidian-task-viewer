@@ -4,6 +4,7 @@ import { DateInput } from '../../../src/utils/values/DateValues';
 import { optional, type Issue } from '../../../src/utils/values/Read';
 import { FakeEl, asEl } from '../helpers/fakeDom';
 import { FocusDoc, asEl as asFocusEl } from '../helpers/focusDom';
+import { commitOf } from '../../../src/views/sharedUI/PressCommit';
 
 /** A date field bound to a value held here, as the hub holds its row. */
 function dateField(initial: string | undefined, opts: { refuse?: boolean; takesSame?: boolean } = {}) {
@@ -27,6 +28,29 @@ function dateField(initial: string | undefined, opts: { refuse?: boolean; takesS
 }
 
 describe('bindField', () => {
+    it('answers whether a commit was refused at once: a text that does not read, or one the form does not take', () => {
+        const f = dateField('2026-10-01');
+        expect(f.field.commit()).toBe(true);
+        f.input.type('2026-02-30');
+        expect(f.field.commit()).toBe(false);
+        f.input.type('2026-10-05');
+        expect(f.field.commit()).toBe(true);
+        const refused = dateField(undefined, { refuse: true });
+        refused.input.type('2026-10-05');
+        expect(refused.field.commit()).toBe(false);
+        expect(refused.input.value).toBe('2026-10-05');
+    });
+
+    it('is a field that commits as its Enter does, what is typed told, for a press elsewhere', () => {
+        const f = dateField('2026-10-01');
+        const owner = commitOf(asEl(f.input))!;
+        expect(owner.typed()).toBe(false);
+        f.input.type('2026-10-05');
+        expect(owner.typed()).toBe(true);
+        expect(owner.commit()).toBe(true);
+        expect([f.commits, owner.typed()]).toEqual([['2026-10-05'], false]);
+    });
+
     it('reads while typing and says what is wrong, writing nothing and keeping the text', () => {
         const f = dateField('2026-10-01');
         f.input.type('2026-02-30');

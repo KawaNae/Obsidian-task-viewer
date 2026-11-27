@@ -1,5 +1,6 @@
 import type { FieldCodec, Issue, Read } from '../../utils/values/Read';
 import { composingIn, onFormEnter } from './formEnter';
+import { ownCommit } from '../../views/sharedUI/PressCommit';
 
 /**
  * What the write a commit waits for came to: taken (`true`); refused with
@@ -33,8 +34,12 @@ export interface BoundField<T> {
      * for a value put in by a control beside the text (a picker, a clear
      * button, a list's item), and for a form that saves what is typed as it
      * closes.
+     *
+     * @returns false when the text stays as typed, refused at once: it does
+     *   not read, or the form does not take it (`BindFieldOptions.commit`);
+     *   true when it is handed on, or the field shows its value
      */
-    commit(): void;
+    commit(): boolean;
     /** Throw away what is typed: the field shows its value again, and says nothing. */
     discard(): void;
 }
@@ -74,7 +79,8 @@ export interface BindFieldOptions<T> {
     /**
      * Takes the field's listeners off once it aborts: a field whose row is
      * being built anew. Taking out an input that holds the focus sends it a
-     * blur at once, and that blur then commits nothing.
+     * blur at once, and that blur then commits nothing. The field is let go
+     * of as one that commits (`ownCommit`) then too.
      */
     signal?: AbortSignal;
 }
@@ -93,6 +99,8 @@ export interface BindFieldOptions<T> {
  * - A value from outside comes in by {@link BoundField.set}, which fires no
  *   event: what the field holds is told apart by its text, not by where an
  *   event came from.
+ * - The field is one that commits (`ownCommit`): a press on a button
+ *   elsewhere commits it as its Enter does, before the button acts.
  */
 export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>): BoundField<T> {
     const { codec } = opts;
@@ -116,25 +124,29 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
         opts.issues(read && !read.ok ? read.issue : null);
     };
 
-    const commit = () => {
+    const commit = (): boolean => {
         const same = typedSame();
         const read = pending();
         typedOver = false;
         if (read === null) {
             // The field shows its value: nothing typed over it.
             given = input.value;
-            return opts.issues(null);
+            opts.issues(null);
+            return true;
         }
-        if (!read.ok) return opts.issues(read.issue);
+        if (!read.ok) {
+            opts.issues(read.issue);
+            return false;
+        }
         opts.issues(null);
         const text = codec.show(read.value);
         if (input.value !== text) put(text);
         if (text === shownValue() && !same) {
             given = text;
-            return;
+            return true;
         }
         const taken = opts.commit(read.value);
-        if (taken === false) return;
+        if (taken === false) return false;
         const before = given;
         given = text;
         if (taken instanceof Promise) {
@@ -153,6 +165,7 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
                 }
             });
         }
+        return true;
     };
 
     const { signal } = opts;
@@ -163,6 +176,7 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     input.addEventListener('compositionend', check, { signal });
     input.addEventListener('blur', commit, { signal });
     onFormEnter(input, commit, { takesEnter: opts.takesEnter, signal });
+    ownCommit(input, { typed: () => pending() !== null, commit }, signal);
 
     return {
         pending,

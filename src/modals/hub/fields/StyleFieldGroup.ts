@@ -89,8 +89,11 @@ export class StyleFieldGroup implements ClosingPart {
 
         const sourceEl = row.createSpan({ cls: 'task-hub__source' });
         const open = this.ctx.openSource;
-        if (open) sourceEl.addEventListener('click', () => open(row => CascadeSource.lineOfStyleField(row, field, this.ctx.plugin.settings.scopeKeys[field])));
-        else sourceEl.addClass('task-hub__source--plain');
+        if (open) {
+            // Pressed as a button is: it opens the line.
+            sourceEl.setAttribute('role', 'button');
+            sourceEl.addEventListener('click', () => open(row => CascadeSource.lineOfStyleField(row, field, this.ctx.plugin.settings.scopeKeys[field])));
+        } else sourceEl.addClass('task-hub__source--plain');
         this.sourceEls[field] = sourceEl;
 
         // Hide the inherited value (`- tv-color::`), and the × that takes the row's own no value out again.

@@ -1,5 +1,6 @@
 import type { Issue } from '../../utils/values/Read';
 import { issueWords } from './issueWords';
+import { pressKey } from '../../views/sharedUI/PressCommit';
 
 /**
  * What a form says of what it holds, and where: an error keeps the
@@ -108,7 +109,7 @@ export class IssueBoard<F extends string> {
         for (const [el, issues] of messages) {
             for (const issue of issues) {
                 const line = el.createDiv({ cls: `tv-form__${issue.tone}`, text: issue.text });
-                if (issue.action) drawAction(line, issue.action);
+                if (issue.action) drawAction(line, issue.action, `issue:${String(issue.at)}:${issue.text}`);
             }
         }
         for (const el of inputs) mark(el, true);
@@ -117,9 +118,10 @@ export class IssueBoard<F extends string> {
     }
 }
 
-/** An issue's button, after its text. */
-function drawAction(line: HTMLElement, action: IssueAction): void {
+/** An issue's button, after its text, keyed by the issue (`pressKey`): the issues are drawn anew as any of them changes. */
+function drawAction(line: HTMLElement, action: IssueAction, key: string): void {
     const button = line.createEl('button', { cls: 'tv-form__issue-action', text: action.label, attr: { type: 'button' } });
+    pressKey(button, key);
     button.addEventListener('click', () => action.run());
 }
 
