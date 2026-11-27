@@ -11,7 +11,7 @@
  *   back on the card the date holds it, why said under it, and a close asks.
  * - On a task not written yet, whose host draws a commit in a microtask, run
  *   as the field's commit is done before the button is looked for: the
- *   status, a date's ×, a tab, the button that shows or hides the line
+ *   status, a date's menu button, a tab, the button that shows or hides the line
  *   above the create, a property's menu button, a list's item ×, the
  *   color's menu button and a tag's ×. The field keeps the focus but for the tab,
  *   which takes it.
@@ -94,7 +94,7 @@ const colorMenu = () => colorRow().querySelector('button.tv-form__menu-button');
 const colorHidden = () => { const struck = colorRow().querySelector('.tv-form__struck'); return shown(struck) && struck.textContent === 'red'; };
 const statusPill = () => hub().querySelector('.task-hub__status-pill');
 const dateInput = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input');
-const dateClear = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' .tv-form__clear-button');
+const dateMenu = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' button.tv-form__menu-button');
 const START = ${JSON.stringify(tr('modal.start'))};
 const createToggle = () => hub().querySelector('.task-hub__create-toggle');
 const card = () => hub()?.querySelector('.task-hub__preview .task-card') ?? null;
@@ -307,21 +307,27 @@ describe('a button of another part pressed with a field typed in, on a task not 
         return JSON.stringify({ acted, ...seen, focus: focusNow(), card: card()?.textContent ?? null });
     `);
 
-    /** As \`pressed\`, the color's menu button pressed; then no value is chosen in its menu, and the color seen. */
-    const pickedInColor = (label: string, field: string, typed: string, read: string) => run<Record<string, unknown>>(label, `
+    /**
+     * As \`pressed\`, a field's menu button \`button()\` pressed; then \`item\`
+     * is chosen in its menu, and whether \`done\` comes true is seen.
+     */
+    const pickedIn = (label: string, field: string, typed: string, button: string, item: string, done: string, read: string) => run<Record<string, unknown>>(label, `
         await openDraft();
         typeIn(${field}, ${JSON.stringify(typed)});
         watch();
-        press(colorMenu());
+        press(${button});
         const acted = await saw(() => R.menus > 0);
         await nextFrame();
         const seen = await settled(() => (${read}));
         const menu = menuTitles();
         const focus = focusNow();
-        menuItem(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.setNoValue'))});
-        const hidden = await saw(() => colorHidden());
-        return JSON.stringify({ acted, ...seen, menu, focus, hidden, card: card()?.textContent ?? null });
+        menuItem(i => i.titleEl?.textContent === ${JSON.stringify(item)});
+        const picked = await saw(() => ${done});
+        return JSON.stringify({ acted, ...seen, menu, focus, picked, card: card()?.textContent ?? null });
     `);
+    /** As \`pickedIn\`, the color's menu button pressed and no value chosen in it: the color hidden. */
+    const pickedInColor = (label: string, field: string, typed: string, read: string) =>
+        pickedIn(label, field, typed, 'colorMenu()', tr('modal.hub.setNoValue'), 'colorHidden()', read);
 
     it('the name typed, the status: the menu open once, the name in the draft, the focus in the name', () => {
         const out = pressed('draft name, status', 'nameInput()', '新しい名前', 'statusPill()', 'R.menus > 0', '{}');
@@ -329,9 +335,9 @@ describe('a button of another part pressed with a field typed in, on a task not 
         expect(String(out.card)).toContain('新しい名前');
     });
 
-    it('the name typed, the start date\'s ×: the date made none, the name in the draft, the focus in the name', () => {
-        const out = pressed('draft name, date ×', 'nameInput()', '新しい名前', 'dateClear(START, \'date\')', 'dateInput(START, \'date\').value === \'\'', '{}');
-        expect(out).toMatchObject({ acted: true, focus: 'name' });
+    it('the name typed, the start date\'s menu button: the menu open once, the name in the draft, the focus in the name, and clear chosen in it makes the date none', () => {
+        const out = pickedIn('draft name, date …', 'nameInput()', '新しい名前', 'dateMenu(START, \'date\')', tr('modal.hub.clearValue'), 'dateInput(START, \'date\').value === \'\'', '{}');
+        expect(out).toMatchObject({ acted: true, menus: 1, focus: 'name', menu: [tr('modal.hub.clearValue')], picked: true });
         expect(String(out.card)).toContain('新しい名前');
     });
 
@@ -367,7 +373,7 @@ describe('a button of another part pressed with a field typed in, on a task not 
 
     it('a tag typed, the color\'s menu button: the menu open once, the tag added, and no value chosen in it hides the color', () => {
         const out = pickedInColor('draft tag, color …', 'tagInput()', 'zz', '{ tags: tagChips() }');
-        expect(out).toMatchObject({ acted: true, menus: 1, tags: ['#tg', '#zz'], hidden: true });
+        expect(out).toMatchObject({ acted: true, menus: 1, tags: ['#tg', '#zz'], picked: true });
     });
 
     it('a color typed, a tag\'s ×: the tag out, the color put in', () => {
@@ -382,7 +388,7 @@ describe('a button of another part pressed with a field typed in, on a task not 
 
     it('a property\'s value typed, the color\'s menu button: the menu open once, the value put in, and no value chosen in it hides the color', () => {
         const out = pickedInColor('draft value, color …', 'valueInput(\'note1\')', 'mm', '{ note1: valueInput(\'note1\').value }');
-        expect(out).toMatchObject({ acted: true, menus: 1, note1: 'mm', focus: 'value note1', hidden: true });
+        expect(out).toMatchObject({ acted: true, menus: 1, note1: 'mm', focus: 'value note1', picked: true });
     });
 });
 

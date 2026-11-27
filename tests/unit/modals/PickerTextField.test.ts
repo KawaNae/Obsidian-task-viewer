@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { PickerTextField, createPickerTextField } from '../../../src/modals/form/PickerTextField';
-import { DateFieldGroup } from '../../../src/modals/form/DateFieldGroup';
-import type { DateTimeFields } from '../../../src/modals/TaskDateValidator';
+import { DateFieldGroup } from '../../../src/modals/hub/fields/DateFieldGroup';
+import type { FieldGroupContext } from '../../../src/modals/hub/fields/FieldGroupContext';
+import type { Task } from '../../../src/types';
+import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import { makeTask } from '../helpers/makeTask';
 import { t } from '../../../src/i18n';
 
@@ -32,6 +34,8 @@ class FakeEl {
     disabled = false;
     tabIndex = 0;
     shown = 0;
+    dataset: Record<string, string> = {};
+    text = '';
 
     constructor(tag: string, cls = '') {
         this.tagName = tag.toUpperCase();
@@ -53,6 +57,8 @@ class FakeEl {
         this.children.splice(this.children.indexOf(ref), 0, el);
     }
     addClass(c: string): void { this.classes.add(c); }
+    toggleClass(c: string, on: boolean): void { if (on) this.classes.add(c); else this.classes.delete(c); }
+    setText(text: string): void { this.text = text; }
     appendText(_t: string): void { /* the label's text is not read */ }
     setAttribute(k: string, v: string): void { this.attrs.set(k, v); }
     addEventListener(type: string, fn: Listener): void {
@@ -184,54 +190,52 @@ describe('PickerTextField', () => {
     });
 });
 
-const NO_DATES: DateTimeFields = { startDate: '', startTime: '', endDate: '', endTime: '', dueDate: '', dueTime: '' };
+/**
+ * The hub's date fields on `task`, its context a stand-in: what the group
+ * hands on (`put`) and says (`issues`) is kept.
+ */
+function dateGroup(task: () => Task, root = new FakeEl('div')) {
+    const put: string[] = [];
+    /** Whether the hub is shut: its fields are disabled with it. */
+    const hub = { shut: false };
+    const said: { at: string; text: string }[][] = [];
+    const ctx = {
+        task,
+        isShut: () => hub.shut,
+        put: async () => { put.push('put'); return true; },
+        plugin: { settings: DEFAULT_SETTINGS, menuPresenter: { present: () => { } } },
+        index: { getTask: () => undefined },
+        openSource: null,
+        issues: { set: (_source: string, issues: readonly { at: string; text: string }[]) => { said.push(issues.map(({ at, text }) => ({ at, text }))); } },
+    } as unknown as FieldGroupContext;
+    const g = new DateFieldGroup(root as unknown as HTMLElement, ctx, { labels: { start: 'start', end: 'end', due: 'due' } });
+    return { g, root, put, said, hub };
+}
 
 describe('DateFieldGroup.setEnabled', () => {
-    it('disables every field with its buttons, so a clear in the hub\'s source mode changes nothing', () => {
-        const root = new FakeEl('div');
-        const inputs: string[] = [];
-        const group = new DateFieldGroup(root as unknown as HTMLElement, {
-            labels: { start: 'start', end: 'end', due: 'due' },
-            current: () => ({ ...NO_DATES, startDate: '2026-09-29', startTime: '10:00', dueDate: '2026-10-01' }),
-            buildOverlayTask: () => makeTask({ id: 'overlay' }),
-            getStartHour: () => 0,
-            taskLookup: () => undefined,
-            getValidationCtx: () => ({ hasImplicitStartDate: false }),
-            onCommit: (group) => { inputs.push(`commit:${group}`); },
-            issues: () => { /* none said */ },
-        });
+    it('disables every field with its picker and its …, so a press in the hub\'s source mode changes nothing', () => {
+        const { g: group, root, put, hub } = dateGroup(() => makeTask({ id: 'row', startDate: '2026-09-29', startTime: '10:00', due: '2026-10-01' }));
+        hub.shut = true;
         group.setEnabled(false);
 
         const controls = [
             ...root.findAll('tv-ctrl__text-input'), ...root.findAll('tv-form__picker-button'),
-            ...root.findAll('tv-form__native-picker-input'), ...root.findAll('tv-form__clear-button'),
+            ...root.findAll('tv-form__native-picker-input'), ...root.findAll('tv-form__menu-button'),
         ];
         expect(controls).toHaveLength(24);
         expect(controls.every(c => c.disabled)).toBe(true);
+        // The hub's date fields have no × in them.
+        expect(root.findAll('tv-form__clear-button')).toEqual([]);
 
-        for (const clear of root.findAll('tv-form__clear-button')) clear.click();
-        for (const button of root.findAll('tv-form__picker-button')) button.click();
+        for (const button of [...root.findAll('tv-form__menu-button'), ...root.findAll('tv-form__picker-button')]) button.click();
         expect(root.findAll('tv-ctrl__text-input').map(input => input.value)).toEqual(['2026-09-29', '10:00', '', '', '2026-10-01', '']);
         expect(root.findAll('tv-form__native-picker-input').every(p => p.shown === 0)).toBe(true);
-        expect(inputs).toEqual([]);
+        expect(put).toEqual([]);
     });
 });
 
 describe('DateFieldGroup.refresh', () => {
-    function group(values: Partial<DateTimeFields>) {
-        const said: { at: string; text: string }[][] = [];
-        const g = new DateFieldGroup(new FakeEl('div') as unknown as HTMLElement, {
-            labels: { start: 'start', end: 'end', due: 'due' },
-            current: () => ({ ...NO_DATES, ...values }),
-            onCommit: () => { },
-            buildOverlayTask: () => makeTask({ id: 'overlay' }),
-            getStartHour: () => 0,
-            taskLookup: () => undefined,
-            getValidationCtx: () => ({ hasImplicitStartDate: false }),
-            issues: (issues) => said.push(issues.map(({ at, text }) => ({ at, text }))),
-        });
-        return { g, said };
-    }
+    const group = (values: Partial<Task>) => dateGroup(() => makeTask({ id: 'row', ...values }));
 
     it('says a rule the values it was made with break, under the field it is of, with nothing typed (the hub as it opens)', () => {
         // @2026-10-14>2026-10-14T02:00: an end time with no start time (rule 4).
@@ -240,33 +244,25 @@ describe('DateFieldGroup.refresh', () => {
         expect(said).toEqual([]);
 
         g.refresh();
-        expect(said).toHaveLength(1);
-        expect(said[0]).toHaveLength(1);
-        expect(said[0][0].at).toBe('endTime');
-        expect(said[0][0].text.split('\n')[0]).toBe(t('validation.endTimeWithoutStart'));
+        const now = said[said.length - 1];
+        expect(now).toHaveLength(1);
+        expect(now[0].at).toBe('endTime');
+        expect(now[0].text.split('\n')[0]).toBe(t('validation.endTimeWithoutStart'));
     });
 
     it('says nothing of values that keep the rules', () => {
         const { g, said } = group({ startDate: '2026-10-14', startTime: '09:00', endTime: '10:00' });
         g.refresh();
-        expect(said).toEqual([[]]);
+        expect(said.length).toBeGreaterThan(0);
+        expect(said.every(issues => issues.length === 0)).toBe(true);
     });
 });
 
 describe('DateFieldGroup.ruleBroken', () => {
-    function group(values: Partial<DateTimeFields>) {
+    /** The row's dates `values`, under a section that gives a start date until `ctx.hasImplicitStartDate` is turned off. */
+    function group(values: Partial<Task>) {
         const ctx = { hasImplicitStartDate: true };
-        const root = new FakeEl('div');
-        const g = new DateFieldGroup(root as unknown as HTMLElement, {
-            labels: { start: 'start', end: 'end', due: 'due' },
-            current: () => ({ ...NO_DATES, ...values }),
-            onCommit: () => { },
-            buildOverlayTask: () => makeTask({ id: 'overlay' }),
-            getStartHour: () => 0,
-            taskLookup: () => undefined,
-            getValidationCtx: () => ctx,
-            issues: () => { /* none said */ },
-        });
+        const { g, root } = dateGroup(() => makeTask({ id: 'row', ...values, cascadeContext: ctx.hasImplicitStartDate ? { startDate: '2026-10-01' } : {} }));
         const inputs = root.findAll('tv-ctrl__text-input');
         return { g, ctx, inputs };
     }

@@ -133,7 +133,8 @@ const NONE = { kind: 'none' } as const;
 export const FieldStates = {
     /**
      * The look of the field. A field with a value of its own shows it, framed
-     * solid, its faint text what emptying it would show. One with none shows
+     * solid, its faint text what emptying it would show (the due's time, its
+     * kind's own: emptied, the due keeps its date). One with none shows
      * what it inherits, framed dashed, or nothing. One whose own no value
      * hides an inherited value shows that value struck through.
      *
@@ -146,6 +147,9 @@ export const FieldStates = {
     look<V>(state: FieldState<V>, kind: FieldKind, spell: (value: V) => string, fills = false): FieldLook {
         const { own, inherited } = state;
         if (own.kind === 'value') {
+            // Emptying the due's time empties the time alone: the due's date
+            // stays the row's own, and nothing inherited comes through.
+            if (kind.part === 'time') return { frame: 'own', faint: null };
             return { frame: 'own', faint: FieldStates.look(emptiedState(state, kind), kind, spell, fills).faint };
         }
         if (own.kind === 'noValue') {

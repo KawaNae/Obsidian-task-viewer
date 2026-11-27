@@ -332,7 +332,7 @@ describe('the hub\'s source mode', () => {
         expect(typed).toBeNull();
     });
 
-    it('shuts the form\'s picker fields as a whole: their clear and picker buttons change nothing', async () => {
+    it('shuts the form\'s picker fields as a whole: their menu and picker buttons open nothing and change nothing', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         openSource('親');
         const shut = run<Record<string, unknown>>(`
@@ -341,20 +341,25 @@ describe('the hub\'s source mode', () => {
             const start = fields[0];
             const shownBefore = start.querySelector('.tv-ctrl__text-input').value;
             const showPicker = HTMLInputElement.prototype.showPicker;
+            const presenter = app.plugins.plugins['obsidian-task-viewer'].menuPresenter;
+            const present = presenter.present;
             let opened = 0;
             HTMLInputElement.prototype.showPicker = function () { opened++; };
+            presenter.present = function (...args) { opened++; return present.apply(this, args); };
             try {
-                start.querySelector('.tv-form__clear-button').click();
+                start.querySelector('button.tv-form__menu-button').click();
                 for (const f of fields) {
                     f.querySelector('.tv-form__picker-button').click();
                     f.querySelector('.tv-form__native-picker-input').click();
                 }
             } finally {
                 HTMLInputElement.prototype.showPicker = showPicker;
+                presenter.present = present;
             }
             await sleep(200);
             return JSON.stringify({
                 fields: fields.length,
+                startMenu: !!start.querySelector('button.tv-form__menu-button'),
                 allDisabled: controls.every(c => c.disabled),
                 shownBefore,
                 shownAfter: start.querySelector('.tv-ctrl__text-input').value,
@@ -362,7 +367,7 @@ describe('the hub\'s source mode', () => {
             });
         `);
         // Six date and time fields and the color field.
-        expect(shut).toEqual({ fields: 7, allDisabled: true, shownBefore: '2026-09-29', shownAfter: '2026-09-29', opened: 0 });
+        expect(shut).toEqual({ fields: 7, startMenu: true, allDisabled: true, shownBefore: '2026-09-29', shownAfter: '2026-09-29', opened: 0 });
         expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 

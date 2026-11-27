@@ -25,13 +25,14 @@ export class FieldLookView {
     /**
      * Put `look` on the field. `fallback` is the kind's own faint text (a
      * date the rules fill in, a format), shown where the look leaves it to
-     * the kind.
+     * the kind, and for a value that spells as nothing in the field (an
+     * inherited due with no time, in the due's time field).
      */
     show(look: FieldLook, fallback = ''): void {
         this.box.toggleClass('tv-form__control--inherited', look.frame === 'inherited');
         const { faint } = look;
         this.input.placeholder = faint === null ? fallback
-            : faint.kind === 'value' ? faint.text
+            : faint.kind === 'value' ? faint.text || fallback
                 : faint.kind === 'noValue' ? t('modal.hub.noValue')
                     : faint.text;
         if (faint?.kind === 'struck') {

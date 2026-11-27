@@ -84,7 +84,7 @@
     min-width: 0;
 }
 
-/* 日付 input の終わり側の clear(×) と時刻 input の始まり側の picker が隣接して
+/* 日付 input の終わり側のボタン（…）と時刻 input の始まり側の picker が隣接して
    誤タップしやすい → 日付・時刻の間を 1 文字分広げる（余白ぶんは
    flex 配分 3:2 により主に date 側が縮む） */
 .tv-form__field--date {

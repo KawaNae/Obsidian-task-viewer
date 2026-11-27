@@ -2,7 +2,7 @@ import type { App } from 'obsidian';
 import type { Task } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
 import type { IndexReads } from '../../../services/core/TaskIndex';
-import type { DateKey } from '../../form/DateFieldGroup';
+import type { DateKey } from './DateFieldGroup';
 import type { IssueBoard } from '../../form/FormIssue';
 import type { Written } from '../../form/bindField';
 import type { FindingField, HubFinding } from '../HubFindings';

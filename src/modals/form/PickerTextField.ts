@@ -112,7 +112,7 @@ export class PickerTextField {
 
 /**
  * 日付、時刻の欄。テキストは YYYY-MM-DD、HH:mm の自由入力で、ピッカーで選んだ値は
- * テキストに入る。TaskHubForm が DateFieldGroup を通して使う。
+ * テキストに入る。ハブの日付の欄（DateFieldGroup）、タイマーの開始の欄、フィルタの条件の欄が使う。
  */
 export function createPickerTextField(
     container: HTMLElement,
@@ -124,6 +124,8 @@ export function createPickerTextField(
         onPick?: (value: string) => void;
         /** The clear button emptied the text. */
         onClear?: () => void;
+        /** Whether the field has a clear button; it has one unless told. The hub's fields have none: their … takes the value out. */
+        clearable?: boolean;
     } = {},
 ): PickerTextField {
     const field = new PickerTextField(container, {
@@ -132,7 +134,7 @@ export function createPickerTextField(
         pickerLabel: pickerType === 'date' ? t('modal.openDatePicker') : t('modal.openTimePicker'),
         placeholder,
         initialValue,
-        clearable: true,
+        clearable: hooks.clearable ?? true,
         onClear: hooks.onClear,
     });
     const { input, picker } = field;
