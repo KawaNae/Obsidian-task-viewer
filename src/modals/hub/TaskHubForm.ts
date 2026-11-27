@@ -1,16 +1,13 @@
-import { DateUtils } from '../../utils/DateUtils';
 import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import { type Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
 import type { IndexReads } from '../../services/core/TaskIndex';
-import { DateFieldGroup } from '../form/DateFieldGroup';
+import { DateFieldGroup } from './fields/DateFieldGroup';
 import { PROPERTY_ICONS } from '../../constants/propertyIcons';
 import { IssueBoard, type FormIssue, type IssueSlot } from '../form/FormIssue';
-import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
-import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
+import type { DateKey } from './fields/DateFieldGroup';
 import type { Written } from '../form/bindField';
-import type { DateTimeFields } from '../TaskDateValidator';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
 import { DraftGuard, type Loss } from '../form/DraftGuard';
 import { FormActions } from '../form/FormActions';
@@ -170,7 +167,7 @@ export interface TaskHubFormDeps {
  * 書かせる。欄の Enter は欄を確定するだけで、書かない。
  *
  * 欄の DOM 構築とコミット/echo の取り込みは欄の部品が持つ: 名前、状態、
- * タグ、スタイル、プロパティは `fields/` 配下、日付は `DateFieldGroup`。
+ * 日付、タグ、スタイル、プロパティで、どれも `fields/` 配下にある。
  * 欄の部品は自前の task コピーを持たず、`FieldGroupContext.task`
  * 経由でホストの値を都度読み、値は `put` でホストに渡す。本体は欄の並び、
  * 誤りの出す場所、所見、閉じる手順を持つ。
@@ -279,26 +276,9 @@ export class TaskHubForm implements HubForm {
         // --- Status + Start / End / Due ---
         const scheduleGroup = basic.createDiv({ cls: 'tv-form__group' });
         this.statusField = new StatusField(scheduleGroup, this.fieldCtx);
-        this.dateGroup = new DateFieldGroup(scheduleGroup, {
+        this.dateGroup = new DateFieldGroup(scheduleGroup, this.fieldCtx, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
             icons: { start: PROPERTY_ICONS.start, end: PROPERTY_ICONS.end, due: PROPERTY_ICONS.due },
-            current: () => dateFieldsOf(this.host.task()),
-            buildOverlayTask: (f) => ({
-                ...this.host.task(),
-                startDate: f.startDate || undefined,
-                startTime: f.startTime || undefined,
-                endDate: f.endDate || undefined,
-                endTime: f.endTime || undefined,
-                due: DateUtils.joinDateTime(f.dueDate, f.dueTime),
-            }),
-            getStartHour: () => this.deps.plugin.settings.startHour,
-            taskLookup: (id) => this.deps.index.getTask(id),
-            getValidationCtx: () => ({
-                hasImplicitStartDate: !!this.host.task().cascadeContext?.startDate,
-                implicitStartDate: this.host.task().cascadeContext?.startDate,
-            }),
-            onCommit: (group, f) => this.commitDates(group, f),
-            issues: (issues) => this.issues.set('dates', issues),
         });
 
         // --- Where the task goes: the entry's ---
@@ -389,16 +369,6 @@ export class TaskHubForm implements HubForm {
     }
 
     // ==================== コミット ====================
-
-    private commitDates(group: DateGroupKey, f: DateTimeFields): Promise<Written> | void {
-        if (this.reach !== null) return;
-        const task = this.host.task();
-        const updates =
-            group === 'start' ? TaskUpdateBuilder.dateGroup(task, 'start', f.startDate, f.startTime)
-            : group === 'end' ? TaskUpdateBuilder.dateGroup(task, 'end', f.endDate, f.endTime)
-            : TaskUpdateBuilder.due(task, f.dueDate, f.dueTime);
-        return this.handOn(updates, `${group}Date`);
-    }
 
     /** Hand `updates` on to the host from the field `at`: a refusal said meanwhile is of that field (`sayPut`). */
     private handOn(updates: Partial<Task> | null, at: HubField | 'form'): Promise<Written> {
@@ -650,7 +620,7 @@ export class TaskHubForm implements HubForm {
         this.readFindings();
         this.nameField.refresh();
         this.statusField.refresh();
-        this.dateGroup.set(dateFieldsOf(this.host.task()));
+        this.dateGroup.refresh();
         this.styleField.refresh();
         this.tagsField.refresh();
         this.propsField.refresh();
@@ -791,17 +761,4 @@ export class TaskHubForm implements HubForm {
         this.place?.dispose();
         this.place = null;
     }
-}
-
-/** A row's dates as the six fields hold them, `''` for none; the due's date and time apart. */
-function dateFieldsOf(task: Task): DateTimeFields {
-    const due = DateUtils.splitDateTime(task.due ?? '');
-    return {
-        startDate: task.startDate || '',
-        startTime: task.startTime || '',
-        endDate: task.endDate || '',
-        endTime: task.endTime || '',
-        dueDate: due.date || '',
-        dueTime: due.time || '',
-    };
 }

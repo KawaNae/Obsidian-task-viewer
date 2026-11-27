@@ -20,6 +20,7 @@ import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/t
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
+import { MENUS } from '../helpers/menus';
 
 const TEST_FILE = 'test-int-hub-issues.md';
 
@@ -35,10 +36,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
 ${DIALOG_ROWS}
+${MENUS}
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
 /** The form row whose label reads label. */
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const dateInput = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input');
+const dateMenu = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' button.tv-form__menu-button');
+/** The look of the date field \`input\`: its frame (inherited when dashed) and its border's style. */
+const frameOf = input => ({ inherited: input.closest('.tv-form__input-with-picker').classList.contains('tv-form__control--inherited'), border: getComputedStyle(input).borderTopStyle });
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const keyInput = () => hub().querySelector('.task-hub__prop-add .tv-form__label input');
 /** What is said under the field's row (or under the name), a line each. */
@@ -179,6 +184,31 @@ describe('the hub\'s form', () => {
             return JSON.stringify({ date: date.value, faint: date.placeholder, time: time.value, says: says(date) });
         `);
         expect(shown).toEqual({ date: '', faint: '2026-12-01', time: '10:00', says: [] });
+        expect(readTestFile(TEST_FILE)).toBe(['# 見出し', '- tv-start:: 2026-12-01', '- [ ] 親 @10:00', '- [ ] 次', ''].join('\n'));
+    });
+
+    it('takes a start\'s own date out by its menu under a heading that gives a date, the time kept, the heading\'s date shown faint in a dashed frame', async () => {
+        const inherited = ['# 見出し', '- tv-start:: 2026-12-01', '- [ ] 親 @2026-11-26T10:00', '- [ ] 次', ''].join('\n');
+        await writeIndexedTestFile(TEST_FILE, inherited);
+        openHub('親');
+        const shown = run<Record<string, unknown>>(`
+            const date = () => dateInput(${JSON.stringify(START())}, 'date');
+            const time = () => dateInput(${JSON.stringify(START())}, 'time');
+            const before = frameOf(date());
+            dateMenu(${JSON.stringify(START())}, 'date').click();
+            await until(() => menuTitles().length > 0, 3000, () => 'no menu');
+            const menu = menuTitles();
+            menuItem(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.clearToInherited'))});
+            await sleep(600);
+            return JSON.stringify({ before, menu, date: date().value, faint: date().placeholder, frame: frameOf(date()), time: time().value, timeFrame: frameOf(time()), says: says(date()) });
+        `);
+        expect(shown).toEqual({
+            before: { inherited: false, border: 'solid' },
+            menu: [tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.clearToInherited')],
+            date: '', faint: '2026-12-01', frame: { inherited: true, border: 'dashed' },
+            time: '10:00', timeFrame: { inherited: false, border: 'solid' },
+            says: [],
+        });
         expect(readTestFile(TEST_FILE)).toBe(['# 見出し', '- tv-start:: 2026-12-01', '- [ ] 親 @10:00', '- [ ] 次', ''].join('\n'));
     });
 

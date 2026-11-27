@@ -66,7 +66,7 @@ const IGNORED: PlaceFacts = {
 
 const settle = async () => { for (let i = 0; i < 4; i++) await Promise.resolve(); };
 
-interface MenuItem { title: string; pick: () => void }
+interface MenuItem { title: string; disabled: boolean; pick: () => void }
 
 /** A form on a draft at a place that has answered, its writes held until the test answers them. */
 async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: PlaceFacts; place?: boolean; opensOn?: TaskHubFocusField } = {}) {
@@ -93,12 +93,12 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
         const items: MenuItem[] = [];
         const menu = {
             addItem: (cb: (item: unknown) => void) => {
-                const one: MenuItem = { title: '', pick: () => { } };
+                const one: MenuItem = { title: '', disabled: false, pick: () => { } };
                 const item = {
                     setTitle: (title: string) => { one.title = title; return item; },
                     setChecked: () => item,
                     setIcon: () => item,
-                    setDisabled: () => item,
+                    setDisabled: (disabled: boolean) => { one.disabled = disabled; return item; },
                     onClick: (fn: () => void) => { one.pick = fn; return item; },
                 };
                 cb(item);
@@ -282,6 +282,18 @@ describe('the dates of a hub on a task not written yet', () => {
         startTime(given).enter();
         expect(given.host.task().startTime).toBe('10:00');
         expect(given.host.task().startDate).toBeUndefined();
+    });
+
+    it('greys the opening of the inherited line alone in the start date\'s menu: the task has no line to open yet', async () => {
+        const s = await setUp({}, { facts: { ...FACTS, inherits: { ...FACTS.inherits, startDate: '2031-01-10' } } });
+        const startDate = s.root.findAll('tv-ctrl__text-input')
+            .find(input => input.attrs.get('aria-label') === `${t('modal.start')} — ${t('modal.date')}`)!;
+        s.press(startDate.parent!.find('tv-form__menu-button')!);
+        expect(s.menus.at(-1)!.map(item => [item.title, item.disabled])).toEqual([
+            [t('modal.hub.fromSection'), true],
+            [t('modal.hub.openInheritedLine'), true],
+            [t('modal.hub.writeInherited'), false],
+        ]);
     });
 
     it('creates nothing where a time committed breaks a rule once the place no longer gives the start date it leant on, and puts the focus on it', async () => {

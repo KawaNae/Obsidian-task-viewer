@@ -23,8 +23,14 @@
  *   mouse.
  * - A row's menu button pressed with its value typed over: the value
  *   written, the menu open.
- * - A date that does not read, typed: another date's × does not act, the
- *   focus and why staying with the date. A tab is chosen all the same.
+ * - A date that does not read, typed: another date's menu button does not
+ *   act, no menu opened, the focus and why staying with the date. A tab is
+ *   chosen all the same.
+ * - A field's own menu button pressed with the field typed in: what is
+ *   typed written first, then what the item picked writes; a date that does
+ *   not read, the menu opened all the same and the item's value put in the
+ *   text's stead. The focus stays in a date and a color, and is in no field
+ *   once a property's rows are built anew.
  * - The add row's Enter: the property added, the focus in its key.
  * - A text being converted by the IME (driven through the DevTools
  *   protocol): written once as the field's value, the conversion going on
@@ -101,7 +107,7 @@ const addItem = key => rowOf(key).querySelector('.task-hub__list-add');
 const addKey = () => hub().querySelector('.task-hub__prop-add .tv-form__label input');
 const addValue = () => hub().querySelector('.task-hub__prop-add input.tv-form__control');
 const dateInput = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input');
-const dateClear = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' .tv-form__clear-button');
+const dateMenu = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' button.tv-form__menu-button');
 const says = input => [...input.closest('.tv-form__row').nextElementSibling.children].map(c => c.className.split(' ')[0]);
 const focusIn = input =>{ chooseTabOf(input).focus(); return input; };
 /** Typed as a person types, the text and then its input event, the field not left. */
@@ -318,23 +324,80 @@ describe('a button pressed with another field typed in', () => {
         });
     });
 
-    it('a date\'s ×, a date that does not read typed: the × does not act, the focus and why staying with the date; a tab chosen all the same', () => {
+    it('a date\'s menu button, a date that does not read typed: the button does not act, no menu open, the focus and why staying with the date; a tab chosen all the same', () => {
         const out = run<Record<string, unknown>>(`
             await openRow('親');
             const start = () => dateInput(${JSON.stringify(tr('modal.start'))}, 'date');
             const end = () => dateInput(${JSON.stringify(tr('modal.end'))}, 'date');
             typeIn(start(), 'あした');
             watchWrites();
-            press(dateClear(${JSON.stringify(tr('modal.end'))}, 'date'));
+            press(dateMenu(${JSON.stringify(tr('modal.end'))}, 'date'));
             await until(() => says(start()).length > 0, 3000, () => 'nothing said, the focus on ' + document.activeElement?.className);
-            const refused = await settled(() => ({ end: end().value, start: start().value, focused: document.activeElement === start(), says: says(start()) }));
+            const refused = await settled(() => ({ end: end().value, start: start().value, focused: document.activeElement === start(), says: says(start()), menu: menuTitles() }));
+            closeMenus();
             press(hubTab(hub(), 'detail'));
             await until(() => hubTabOn(hub()) === 'detail', 3000, () => 'on ' + hubTabOn(hub()));
             const tab = await settled(() => ({ focused: document.activeElement === hubTab(hub(), 'detail'), start: start().value }));
             return JSON.stringify({ refused, tab });
         `);
-        expect(out.refused).toEqual({ end: '2026-10-03', start: 'あした', focused: true, says: ['tv-form__error'], writes: 0, disk: LINES.join('\n') });
+        expect(out.refused).toEqual({ end: '2026-10-03', start: 'あした', focused: true, says: ['tv-form__error'], menu: [], writes: 0, disk: LINES.join('\n') });
         expect(out.tab).toEqual({ focused: true, start: 'あした', writes: 0, disk: LINES.join('\n') });
+    });
+});
+
+describe('a field\'s own menu pressed with the field typed in, an item of it picked', () => {
+    /** Where the focus is: the field named, or the class of what holds it. */
+    const focusOf = `const focusOf = named => { const at = document.activeElement; for (const [name, el] of Object.entries(named)) if (at === el) return name; return at === document.body ? 'body' : at?.className ?? 'nothing'; };`;
+
+    it('a date that does not read: the menu opens, the text kept and why said, nothing written; its item puts its value in the text\'s stead', () => {
+        const out = run<Record<string, unknown>>(`
+            ${focusOf}
+            await openRow('親');
+            const start = () => dateInput(${JSON.stringify(tr('modal.start'))}, 'date');
+            typeIn(start(), 'あした');
+            watchWrites();
+            press(dateMenu(${JSON.stringify(tr('modal.start'))}, 'date'));
+            await until(() => menuTitles().length > 0, 3000, () => 'no menu, the focus on ' + document.activeElement?.className);
+            const menuOpen = await settled(() => ({ menu: menuTitles(), start: start().value, says: says(start()) }));
+            menuItem(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.clearValue'))});
+            const picked = await settled(() => ({ start: start().value, says: says(start()), focus: focusOf({ start: start() }) }));
+            return JSON.stringify({ menuOpen, picked });
+        `);
+        expect(out.menuOpen).toEqual({ menu: [tr('modal.hub.clearValue')], start: 'あした', says: ['tv-form__error'], writes: 0, disk: LINES.join('\n') });
+        expect(out.picked).toEqual({ start: '', says: [], focus: 'start', writes: 1, disk: withLines(1, 2, '- [ ] 親 @>2026-10-03') });
+    });
+
+    it('a text value typed over: the value written, then the item, two writes, the focus in no field once the rows are built anew', () => {
+        const out = run<Record<string, unknown>>(`
+            ${focusOf}
+            await openRow('親', 'detail');
+            typeIn(valueInput('summary'), '資料XX');
+            watchWrites();
+            press(moreOf('summary'));
+            await until(() => menuTitles().length > 0, 3000, () => 'no menu');
+            menuItem(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.deleteKey'))});
+            await until(() => !rowOf('summary'), 3000, () => 'summary still drawn');
+            return JSON.stringify(await settled(() => ({ focus: focusOf({}) })));
+        `);
+        expect(out).toEqual({ focus: 'body', writes: 2, disk: withLines(6, 7) });
+    });
+
+    it('a color typed over: the color written, then the item, two writes, the focus left in the color', async () => {
+        await writeIndexedTestFile(TEST_FILE, withLines(2, 2, '\t- tv-color:: red'));
+        const out = run<Record<string, unknown>>(`
+            ${focusOf}
+            await openRow('親', 'detail');
+            const box = () => hub().querySelector('.tv-form__input-with-picker--color');
+            const color = () => box().querySelector('input.tv-ctrl__text-input');
+            typeIn(color(), 'blue');
+            watchWrites();
+            press(box().querySelector('button.tv-form__menu-button'));
+            await until(() => menuTitles().length > 0, 3000, () => 'no menu');
+            const menu = menuTitles();
+            menuItem(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.clearValue'))});
+            return JSON.stringify(await settled(() => ({ menu, color: color().value, focus: focusOf({ color: color() }) })));
+        `);
+        expect(out).toEqual({ menu: [tr('modal.hub.clearValue')], color: '', focus: 'color', writes: 2, disk: LINES.join('\n') });
     });
 });
 

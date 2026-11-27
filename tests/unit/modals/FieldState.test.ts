@@ -86,6 +86,12 @@ describe('FieldStates: the due\'s date and time', () => {
         expect(items('vA', FieldKinds.dueTime)).toBe('openSource, clearToInherited');
         expect(items('·A', FieldKinds.dueTime)).toBe('openSource, writeInherited');
     });
+
+    it('show the inherited due faint in the date\'s field once the row\'s own is emptied, and the time\'s own faint text in the time\'s, whose emptying keeps the date', () => {
+        expect(FieldStates.look(state('vA'), FieldKinds.dueDate, v => v)).toEqual({ frame: 'own', faint: { kind: 'value', text: 'given' } });
+        expect(FieldStates.look(state('vA'), FieldKinds.dueTime, v => v)).toEqual({ frame: 'own', faint: null });
+        expect(FieldStates.look(state('·A'), FieldKinds.dueTime, v => v)).toEqual({ frame: 'inherited', faint: { kind: 'value', text: 'given' } });
+    });
 });
 
 describe('FieldStates: the color, the line style, the mask', () => {
