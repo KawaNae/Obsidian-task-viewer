@@ -78,9 +78,10 @@ describe('inheritedAt', () => {
             '    - [ ] child @2026-09-28',
         ];
         const child = rowOf(lines, 'child');
-        // The row's own copy does not keep what its date hides.
+        // The row's own date stands over the section's, which the row is given all the same.
         const task = FileParsePipeline.parse('n.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('n.md')).tasks.find(t => t.line === child)!;
-        expect(task.cascadeContext?.startDate).toBeUndefined();
+        expect(task.startDate).toBe('2026-09-28');
+        expect(task.cascadeContext?.startDate).toBe('2026-09-01');
 
         const values = byKey(inheritedAt(lines, child, DEFAULT_SETTINGS));
         expect(values['tv-start'].lines).toEqual(['tv-start: 2026-09-01']);

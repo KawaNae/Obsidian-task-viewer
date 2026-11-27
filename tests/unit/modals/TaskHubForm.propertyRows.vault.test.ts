@@ -56,7 +56,7 @@ function asHub(h: Awaited<ReturnType<typeof openMoveHub>>): PropHub {
 async function draftHub(inherited: string[]): Promise<PropHub> {
     const parent = FileParsePipeline.parse('n.md', ['# h', ...inherited, '- [ ] 親'], DEFAULT_SETTINGS, namesOutsideIndex('n.md')).tasks[0];
     const place: CreatePlace = { kind: 'childOf', taskId: 'parent' };
-    const facts: PlaceFacts = { kind: 'childOf', parent: '親', path: 'n.md', under: 'h', inherits: parent.cascadeContext!, inheritedFrom: parent.inheritedFrom };
+    const facts: PlaceFacts = { kind: 'childOf', parent: '親', path: 'n.md', under: 'h', inherits: parent.cascadeContext ?? {}, inheritedFrom: parent.inheritedFrom };
     const doc = new FocusDoc();
     Object.assign(doc, { createElement: () => ({ getContext: () => null }) });
     const root = doc.root();

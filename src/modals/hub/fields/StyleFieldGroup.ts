@@ -214,7 +214,12 @@ export class StyleFieldGroup implements ClosingPart {
 
     private updateColorSwatch(): void {
         if (!this.colorSwatch) return;
-        const value = this.inputs.color.value.trim() || this.ctx.task().cascadeContext?.color || '';
+        // What is typed; an empty field, what the task shows once it is
+        // committed: the inherited color, as emptying takes the row's own
+        // out, and none where the row says it has none, which the field
+        // shows empty.
+        const task = this.ctx.task();
+        const value = this.inputs.color.value.trim() || (task.color === null ? '' : task.cascadeContext?.color) || '';
         this.colorSwatch.style.backgroundColor = value
             ? (/^[0-9a-fA-F]{3,6}$/.test(value) ? `#${value}` : value)
             : 'transparent';

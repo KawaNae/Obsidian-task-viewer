@@ -136,27 +136,13 @@ export class NoteTasks {
         task.mask = extracted.mask;
         if (extracted.tags && extracted.tags.length > 0) task.tags = TagExtractor.merge(extracted.tags, task.tags);
 
-        // What the section gives, less what the row says itself.
-        const cc = this.inheritedBy(task, this.inheritance(section));
-        if (cc) task.cascadeContext = cc;
+        // What the section gives, whether the row says the same field itself
+        // or not: the readers take the row's own first (`getEffective*`,
+        // `statedDates`).
+        const cc = this.inheritance(section);
+        if (Object.keys(cc).length > 0) task.cascadeContext = cc;
         const sources = this.sourcesOf(section);
         if (sources) task.inheritedFrom = sources;
-    }
-
-    /**
-     * What a row inherits of `given`, what its section gives it
-     * (`inheritance`). Dates and style are the section's only where the row
-     * says nothing of them (they override, and a style the row says it has
-     * none of hides the section's): a row says a field with a value, or with
-     * none (null), and an empty date is a line with no `@` block, which says
-     * none of them. Tags and properties go through in part (a union;
-     * child-wins per key), so they are kept whole. Undefined when nothing is
-     * left, as a row with no `cascadeContext`.
-     */
-    static inheritedBy(row: Partial<Pick<Task, ScalarField>>, given: NonNullable<Task['cascadeContext']>): Task['cascadeContext'] {
-        const cc = { ...given };
-        for (const field of SCALAR_FIELDS) if (row[field] !== undefined && row[field] !== '') delete cc[field];
-        return Object.keys(cc).length > 0 ? cc : undefined;
     }
 
     /**
@@ -168,11 +154,12 @@ export class NoteTasks {
     }
 
     /**
-     * What a row standing in `section` inherits of it, the row saying
-     * nothing itself: every value the section resolves to. A built-in the
-     * section hides with no value is none to inherit. A row that says
-     * a date or a style itself keeps its own (`inheritedBy`); a row not yet
-     * written is shown what it would inherit.
+     * What the layers above give a row standing in `section`: every value
+     * the section resolves to, whether the row says the same field itself
+     * or not. A row's own date or style, a value or none, stands over the
+     * one given here, as the readers take it. A built-in the section hides
+     * with no value is none to give (where it was hidden is the row's
+     * `inheritedFrom`). A row not yet written is given the same.
      */
     static inheritance(section: SectionNode): NonNullable<Task['cascadeContext']> {
         const cc: NonNullable<Task['cascadeContext']> = {};

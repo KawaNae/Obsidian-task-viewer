@@ -83,7 +83,7 @@ async function open(files: Record<string, string>) {
  * What a draft and the row read back are compared by: every value the hub
  * shows of a task. A start date of none is spelt two ways: the reading gives
  * a line with no date an empty one, the draft none; both say no date, as
- * `NoteTasks.inheritedBy` reads them.
+ * `statedDates` reads them.
  */
 function shown(task: Task) {
     return {

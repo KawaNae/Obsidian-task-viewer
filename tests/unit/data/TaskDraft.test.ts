@@ -2,12 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { applyToDraft, draftTask, newRowOf, withPlace, DRAFT_ID, type DraftAt } from '../../../src/services/data/TaskDraft';
 import type { ResolvedSources } from '../../../src/services/parsing/tree/Sections';
 import { DEFAULT_SCOPE_KEYS, type PropertyScalar } from '../../../src/types';
+import { statedDates } from '../../../src/utils/TaskDates';
+import { getEffectiveColor } from '../../../src/services/data/EffectiveProperties';
 import { byKey } from '../helpers/properties';
 
 /**
- * A task not written yet (`TaskDraft`): its own values as given, what it
- * inherits made again from the place each time it changes, less what it
- * says itself; a new name taking its tags with it; and the row a write is
+ * A task not written yet (`TaskDraft`): its own values as given, and
+ * what the place gives it whatever it says itself, its own standing over
+ * it; a new name taking its tags with it; and the row a write is
  * handed from it, a line for every value of its own and none for a value it
  * has none of.
  */
@@ -35,9 +37,10 @@ describe('draftTask', () => {
         expect('color' in task).toBe(false);
     });
 
-    it('inherits what the place gives less what it says itself, and says from where', () => {
+    it('is given what the place gives whatever it says itself, and says from where', () => {
         const task = draftTask(AT, { startTime: '09:00' });
-        expect(task.cascadeContext).toEqual({ startDate: '2031-02-01', color: 'ff0000', tags: ['ft'], properties: byKey({ area: text('lab') }) });
+        expect(task.cascadeContext).toEqual(AT.inherits);
+        expect(statedDates(task)).toEqual({ startDate: '2031-02-01', startTime: '09:00' });
         expect(task.inheritedFrom).toBe(FROM);
         expect(draftTask({ file: 'n.md', inherits: {} }).cascadeContext).toBeUndefined();
     });
@@ -62,14 +65,16 @@ describe('applyToDraft', () => {
         expect(applyToDraft(task, { content: '#q', tags: ['q', 'w'] }, AT).tags).toEqual(['q', 'w']);
     });
 
-    it('makes what it inherits again: a date it says hides the place\'s, and taken out lets it through again', () => {
+    it('keeps what the place gives as its own values change: a date it says stands over the place\'s, and taken out the place\'s shows', () => {
         const task = draftTask(AT);
-        expect(task.cascadeContext?.startDate).toBe('2031-02-01');
         const said = applyToDraft(task, { startDate: '2031-03-01' }, AT);
-        expect(said.cascadeContext?.startDate).toBeUndefined();
-        expect(applyToDraft(said, { startDate: undefined }, AT).cascadeContext?.startDate).toBe('2031-02-01');
+        expect(said.cascadeContext?.startDate).toBe('2031-02-01');
+        expect(statedDates(said).startDate).toBe('2031-03-01');
+        expect(statedDates(applyToDraft(said, { startDate: undefined }, AT)).startDate).toBe('2031-02-01');
         // A style it has none of hides the place's.
-        expect(applyToDraft(task, { color: null }, AT).cascadeContext?.color).toBeUndefined();
+        const none = applyToDraft(task, { color: null }, AT);
+        expect(none.cascadeContext?.color).toBe('ff0000');
+        expect(getEffectiveColor(none)).toBeUndefined();
     });
 });
 
@@ -77,7 +82,8 @@ describe('withPlace', () => {
     it('puts the draft in the place answered again: its note, what it inherits and from where', () => {
         const task = draftTask(AT, { startTime: '09:00' });
         const moved = withPlace(task, { file: 'm.md', inherits: { startTime: '08:00', due: '2031-04-01' } });
-        expect(moved).toMatchObject({ file: 'm.md', startTime: '09:00', cascadeContext: { due: '2031-04-01' } });
+        expect(moved).toMatchObject({ file: 'm.md', startTime: '09:00' });
+        expect(moved.cascadeContext).toEqual({ startTime: '08:00', due: '2031-04-01' });
         expect('inheritedFrom' in moved).toBe(false);
         expect(withPlace(task, { file: 'm.md', inherits: {} }).cascadeContext).toBeUndefined();
     });

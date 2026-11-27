@@ -1,7 +1,6 @@
 import type { Properties, ScopeKeys, Task } from '../../types';
 import type { Inheritance } from './CreatePlaces';
 import { createTempTask } from './createTempTask';
-import { NoteTasks } from '../parsing/tree/NoteTasks';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 import { formatTaskLine } from '../parsing/TaskLineFormat';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
@@ -13,12 +12,11 @@ import type { NewRow } from '../persistence/NewRow';
  * puts in a place from it. Pure: what it reads of the place is handed in
  * (`DraftAt`).
  *
- * Its own values are what the user gives it; what it inherits, and from
- * where, are what the place answers it would (`CreatePlaces.facts`), less
- * what the draft says itself, by the rule the reading applies to a row
- * (`NoteTasks.inheritedBy`). They are made again each time the draft
- * changes, as the reading makes them again of a row each time it is read,
- * so the draft reads as the row will once it is written and read.
+ * Its own values are what the user gives it; what the layers above give
+ * it, and from where, are what the place answers (`CreatePlaces.facts`),
+ * whatever the draft says itself, as the reading gives a row
+ * (`NoteTasks.inheritance`): the draft reads as the row will once it is
+ * written and read.
  *
  * What a row has only once it is a line:
  * - `id`: {@link DRAFT_ID}, which no row of the index is named
@@ -94,14 +92,13 @@ export function applyToDraft(task: Task, updates: Partial<Task>, at: DraftAt): T
 }
 
 /**
- * The draft at `at`: in its note, inheriting what a line put there does,
- * less what the draft says itself. What a place answering again changes.
+ * The draft at `at`: in its note, given what a line put there is. What a
+ * place answering again changes.
  */
 export function withPlace(task: Task, at: DraftAt): Task {
     const { cascadeContext: _was, inheritedFrom: _from, ...own } = task;
     const placed: Task = { ...own, file: at.file };
-    const cascadeContext = NoteTasks.inheritedBy(own, at.inherits);
-    if (cascadeContext) placed.cascadeContext = cascadeContext;
+    if (Object.keys(at.inherits).length > 0) placed.cascadeContext = at.inherits;
     if (at.inheritedFrom) placed.inheritedFrom = at.inheritedFrom;
     return placed;
 }
