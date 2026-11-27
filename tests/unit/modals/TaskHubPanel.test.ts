@@ -17,7 +17,8 @@ import ja from '../../../src/i18n/locales/ja.json';
 import en from '../../../src/i18n/locales/en.json';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
-import { FocusDoc, type FocusEl } from '../helpers/focusDom';
+import { holdPresses, ownCommit, type PressHold } from '../../../src/views/sharedUI/PressCommit';
+import { FocusDoc, asEl, type FocusEl } from '../helpers/focusDom';
 import { TFile } from '../mocks/obsidian';
 
 /**
@@ -229,6 +230,24 @@ describe('a hub with nothing to wait for', () => {
 
         const holds = shells.map(shell => (shell.opts as { holdsPresses?: { drawNow?: () => void } } | null)?.holdsPresses);
         expect(holds.map(hold => typeof hold?.drawNow)).toEqual(['function', 'function']);
+    });
+
+    it('leaves the presses on the card to the card: a button on it takes the focus from a field typed in, which commits nothing first', async () => {
+        const r = rig();
+        await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
+        // The panel holds its presses as the overlay does with what the hub hands it.
+        holdPresses(asEl(r.panel), (shells[0].opts as unknown as { holdsPresses: PressHold }).holdsPresses);
+        const field = (forms[0].el as FocusEl).createEl('input', { type: 'text' });
+        let commits = 0;
+        ownCommit(asEl(field), { typed: () => true, commit: () => { commits++; return true; } });
+        const onCard = r.body.find('task-hub__preview')!.createEl('button');
+        const pressed: number[] = [];
+        onCard.addEventListener('click', () => pressed.push(commits));
+        field.focus();
+        onCard.press();
+        expect(pressed).toEqual([0]);
+        expect(commits).toBe(0);
+        expect(r.doc.activeElement).toBe(onCard);
     });
 
     it('on a task not written yet is open with its card drawn as the call returns', () => {

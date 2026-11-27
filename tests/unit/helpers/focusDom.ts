@@ -274,6 +274,13 @@ export class FocusEl {
         return this.findAll(cls)[0] ?? null;
     }
 
+    /** The first descendant a selector of one class (`.name`) names; other selectors are not kept. */
+    querySelector(selector: string): FocusEl | null {
+        const m = /^\.([\w-]+)$/.exec(selector);
+        if (!m) throw new Error(`focusDom keeps no selector but one class: ${selector}`);
+        return this.find(m[1]);
+    }
+
     select(): void { this.setSelectionRange(0, this.value.length); }
     setSelectionRange(start: number, end: number): void {
         this.selectionStart = start;
