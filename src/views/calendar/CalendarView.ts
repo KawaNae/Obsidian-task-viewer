@@ -231,6 +231,7 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
                 const cellDate = new Date(cursor);
                 const dateKey = DateUtils.getLocalDateString(cellDate);
                 weekDates.push(dateKey);
+                this.renderDaySpace(weekRow, dateKey, i + 1);
                 this.renderDateHeader(weekRow, cellDate, i + 1, month, today);
                 cursor.setDate(cursor.getDate() + 1);
             }
@@ -298,6 +299,20 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         }
     }
 
+    /**
+     * The day's empty space: the day's column over every track of the row,
+     * drawn under the day's header and the cards, so that a press on the
+     * column where neither is lands on it. The header lets a press through
+     * but on its link and its moon phase (CSS), and the row always has a track under it
+     * for the space to reach the row's bottom (`renderWeekTasks`).
+     */
+    private renderDaySpace(weekRow: HTMLElement, dateKey: string, colIndex: number): HTMLElement {
+        const space = weekRow.createDiv('cal-day-space');
+        space.dataset.date = dateKey;
+        space.style.gridColumn = `${getGridColumnForDay(colIndex, this.shouldShowWeekNumbers())}`;
+        return space;
+    }
+
     private renderDateHeader(
         weekRow: HTMLElement,
         date: Date,
@@ -345,7 +360,13 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         };
     }
 
-    /** The week's tasks on the row, under the day headers: the lane Timeline's all-day row draws too. */
+    /**
+     * The week's tasks on the row, under the day headers: the lane Timeline's
+     * all-day row draws too. The row's tracks are the headers' and one per
+     * track of cards, and one with no cards on a week with none: the auto
+     * track fills the row's height under the headers, where the days' empty
+     * spaces (spanning every track) reach.
+     */
     private renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[], reconciler: CardReconciler): void {
         const tracks = drawDateGridLane(weekRow, allTasks, {
             dates: weekDates,
@@ -354,9 +375,7 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             scope: 'lane',
             timeOnSingleDay: true,
         }, { taskRenderer: this.taskRenderer, settings: this.plugin.settings, reconciler });
-        if (tracks > 0) {
-            weekRow.style.gridTemplateRows = `var(--calendar-header-height) repeat(${tracks}, minmax(var(--calendar-track-height), auto))`;
-        }
+        weekRow.style.gridTemplateRows = `var(--calendar-header-height) repeat(${Math.max(tracks, 1)}, minmax(var(--calendar-track-height), auto))`;
     }
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
