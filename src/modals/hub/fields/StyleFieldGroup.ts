@@ -1,4 +1,3 @@
-import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { COLOR_VALUES, LINE_STYLE_VALUES } from '../../../suggest/ScopeValues';
@@ -12,12 +11,15 @@ import { createFormRow } from '../../form/formRow';
 import { bindField, type BoundField, type Written } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { PickerTextField } from '../../form/PickerTextField';
+import { FieldMenuButton, type FieldMenu } from '../../form/FieldMenuButton';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
 import { ValueSuggest } from '../../../suggest/ValueSuggest';
 import { cssColorToHex } from '../../../utils/ColorUtils';
 import type { ClosingPart, FieldGroupContext, UnsavedField } from './FieldGroupContext';
+import { FieldLookView } from './FieldLookView';
+import { FieldMenus } from './FieldMenus';
+import { FieldKinds, FieldStates, type FieldAction, type FieldState, type StyleField } from './FieldState';
 
-type StyleField = 'color' | 'linestyle' | 'mask';
 const FIELDS: readonly StyleField[] = ['color', 'linestyle', 'mask'];
 const LABEL_KEYS: Record<StyleField, string> = { color: 'modal.hub.color', linestyle: 'modal.hub.linestyle', mask: 'modal.hub.mask' };
 
@@ -37,7 +39,11 @@ const CODECS: Record<StyleField, FieldCodec<string | undefined>> = {
  * suggest が絡み合っているため 3 分割せず 1 グループにまとめている。
  *
  * 各欄は `bindField` で値に結ぶ。読めない値（`zigzag` の線種、色でない色）は
- * 欄の下に理由を出して保存しない。
+ * 欄の下に理由を出して保存しない。欄の見た目（破線の枠、薄い字、隠した値の
+ * 線）、… のメニューの項目、空にしたときの書き込みは、欄の状態の表
+ * （`FieldStates`）が決め、ここはそれを描く。空にして確定すると、自分の行を
+ * 消し、継承した値があればそれが出る。継承した値を隠すのも、継承した値を
+ * 自分の値として書くのも、… のメニューである。所見で止まった欄には … を出さない。
  */
 export class StyleFieldGroup implements ClosingPart {
     private colorField!: PickerTextField;
@@ -46,9 +52,8 @@ export class StyleFieldGroup implements ClosingPart {
     private readonly inputs = {} as Record<StyleField, HTMLInputElement>;
     private readonly bound = {} as Record<StyleField, BoundField<string | undefined>>;
     private readonly says = {} as Record<StyleField, HTMLElement>;
-    private sourceEls: Partial<Record<StyleField, HTMLElement>> = {};
-    private hideButtons: Partial<Record<StyleField, HTMLButtonElement>> = {};
-    private unhideButtons: Partial<Record<StyleField, HTMLButtonElement>> = {};
+    private readonly looks = {} as Record<StyleField, FieldLookView>;
+    private readonly menus = {} as Record<StyleField, FieldMenuButton>;
 
     constructor(container: HTMLElement, private ctx: FieldGroupContext) {
         for (const field of FIELDS) this.renderRow(container, field, LABEL_KEYS[field]);
@@ -60,6 +65,8 @@ export class StyleFieldGroup implements ClosingPart {
         this.says[field] = says;
 
         let input: HTMLInputElement;
+        /** The field's box: where its frame is drawn, and its … stands over the end of. */
+        let box: HTMLElement;
         let put: ((text: string) => void) | undefined;
 
         if (field === 'color') {
@@ -74,6 +81,7 @@ export class StyleFieldGroup implements ClosingPart {
             });
             this.nativeColorInput = this.colorField.picker;
             input = this.colorField.input;
+            box = this.colorField.el;
             // 色見本はテキストの入力の中の左端に重ねる
             this.colorSwatch = this.colorField.el.createSpan({ cls: 'tv-ctrl__color-swatch task-hub__color-swatch' });
             this.colorField.el.insertBefore(this.colorSwatch, input);
@@ -82,31 +90,20 @@ export class StyleFieldGroup implements ClosingPart {
                 this.updateColorSwatch();
             };
         } else {
-            input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
+            box = row.createDiv({ cls: 'tv-form__control' });
+            input = box.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow' });
         }
         this.inputs[field] = input;
         input.value = this.ctx.task()[field] ?? '';
-
-        const sourceEl = row.createSpan({ cls: 'task-hub__source' });
-        const open = this.ctx.openSource;
-        if (open) {
-            // Pressed as a button is: it opens the line.
-            sourceEl.setAttribute('role', 'button');
-            sourceEl.addEventListener('click', () => open(row => CascadeSource.lineOfStyleField(row, field, this.ctx.plugin.settings.scopeKeys[field])));
-        } else sourceEl.addClass('task-hub__source--plain');
-        this.sourceEls[field] = sourceEl;
-
-        // Hide the inherited value (`- tv-color::`), and the × that takes the row's own no value out again.
-        const hide = row.createEl('button', { cls: 'tv-icon-btn task-hub__hide', attr: { type: 'button' } });
-        setIcon(hide.createSpan(), 'ban');
-        hide.setAttribute('aria-label', t('modal.hub.hideInherited', { key: this.ctx.plugin.settings.scopeKeys[field] }));
-        hide.addEventListener('click', () => this.hide(field));
-        this.hideButtons[field] = hide;
-        const unhide = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove task-hub__prop-remove' });
-        setIcon(unhide.createSpan(), 'x');
-        unhide.setAttribute('aria-label', t('modal.hub.removeNoValue', { field: t(labelKey) }));
-        unhide.addEventListener('click', () => { void this.commit(field, undefined); this.refresh(); });
-        this.unhideButtons[field] = unhide;
+        this.looks[field] = new FieldLookView(box, input);
+        this.menus[field] = new FieldMenuButton(box, {
+            label: t('modal.hub.fieldMenu', { field: t(labelKey) }),
+            key: `${field}:menu`,
+            fields: () => [input],
+            menu: () => this.menuOf(field),
+            presenter: this.ctx.plugin.menuPresenter,
+            disabled: () => this.ctx.isShut() || this.ctx.locked(field),
+        });
 
         // An item picked from the list is put in and committed; the field's
         // own Enter (bindField) commits what is typed when no list is open.
@@ -151,7 +148,7 @@ export class StyleFieldGroup implements ClosingPart {
             put,
         });
 
-        this.updateDecoration(field);
+        this.restyle(field);
     }
 
     private commit(field: StyleField, value: string | undefined): Promise<Written> | void {
@@ -159,10 +156,42 @@ export class StyleFieldGroup implements ClosingPart {
         return this.ctx.put(TaskUpdateBuilder.styleField(this.ctx.task(), field, value ?? ''), field);
     }
 
-    /** Write the row's own no value of `field`, which hides the value it inherits. */
-    private hide(field: StyleField): void {
+    /** The field as the task is now: what its own line says, and what the layers above give it. */
+    private stateOf(field: StyleField): FieldState<string> {
+        return FieldStates.ofStyle(this.ctx.task(), field);
+    }
+
+    /** The field's menu as the task is now (`FieldStates.menu`); none for a field a finding locks. */
+    private menuOf(field: StyleField): FieldMenu {
+        if (this.ctx.locked(field)) return { heads: [], items: [] };
+        const state = this.stateOf(field);
+        const { source, items } = FieldStates.menu(state, FieldKinds.style, { opensSource: this.ctx.openSource !== null });
+        return {
+            heads: source ? [FieldMenus.head(source)] : [],
+            items: items.map(action => FieldMenus.item(action, () => this.runMenu(field, action))),
+        };
+    }
+
+    /** Do what the menu item `action` of the field does, to the task as it is now. */
+    private runMenu(field: StyleField, action: FieldAction): void {
         if (this.ctx.isShut() || this.ctx.locked(field)) return;
-        void this.ctx.put(TaskUpdateBuilder.styleHidden(this.ctx.task(), field), field);
+        const task = this.ctx.task();
+        switch (action.action) {
+            case 'openSource':
+                this.ctx.openSource?.(row => CascadeSource.lineOfField(row, field, this.ctx.plugin.settings.scopeKeys[field]));
+                return;
+            case 'dropOwn':
+                void this.ctx.put(TaskUpdateBuilder.styleField(task, field, ''), field);
+                break;
+            case 'noValue':
+                void this.ctx.put(TaskUpdateBuilder.styleHidden(task, field), field);
+                break;
+            case 'writeInherited': {
+                const { inherited } = this.stateOf(field);
+                if (inherited.kind === 'value') void this.ctx.put(TaskUpdateBuilder.styleField(task, field, inherited.value), field);
+                break;
+            }
+        }
         this.refresh();
     }
 
@@ -183,32 +212,10 @@ export class StyleFieldGroup implements ClosingPart {
         for (const field of FIELDS) if (this.bound[field].pending()?.ok) this.bound[field].commit();
     }
 
-    /** cascade placeholder + 出所ラベル + swatch の同期 */
-    private updateDecoration(field: StyleField): void {
-        const input = this.inputs[field];
-        const sourceEl = this.sourceEls[field];
-        if (!input || !sourceEl) return;
-
-        const task = this.ctx.task();
-        const cascadeValue = task.cascadeContext?.[field];
-        // Inherited, a value or no value (a layer above hid it); null when the row says its own.
-        const source = CascadeSource.forStyleField(task, field);
-        // A no value shows as such, the row's own (with its ×) or an inherited one
-        // (with its source); with none of its own, the value it inherits.
-        const noValue = task[field] === null || (source !== null && cascadeValue === undefined);
-        input.placeholder = noValue ? t('modal.hub.noValue') : (task[field] === undefined && cascadeValue) || '';
-        const hidesNothing = task[field] !== undefined || cascadeValue === undefined;
-        this.hideButtons[field]?.toggleClass('is-hidden', hidesNothing);
-        this.unhideButtons[field]?.toggleClass('is-hidden', task[field] !== null);
-
-        if (source) {
-            sourceEl.setText(CascadeSource.label(source));
-            sourceEl.style.display = '';
-        } else {
-            sourceEl.setText('');
-            sourceEl.style.display = 'none';
-        }
-
+    /** The field's look and its … from its state now, and the color's swatch. */
+    private restyle(field: StyleField): void {
+        this.looks[field].show(FieldStates.look(this.stateOf(field), FieldKinds.style, value => value));
+        this.menus[field].sync();
         if (field === 'color') this.updateColorSwatch();
     }
 
@@ -231,7 +238,7 @@ export class StyleFieldGroup implements ClosingPart {
         const task = this.ctx.task();
         for (const field of FIELDS) {
             this.bound[field].set(task[field] ?? undefined);
-            this.updateDecoration(field);
+            this.restyle(field);
         }
         this.showEnabled();
     }
@@ -248,10 +255,7 @@ export class StyleFieldGroup implements ClosingPart {
             const input = this.inputs[field];
             if (input) input.disabled = shut || this.ctx.locked(field);
         }
-        for (const field of FIELDS) {
-            const off = shut || this.ctx.locked(field);
-            for (const button of [this.hideButtons[field], this.unhideButtons[field]]) if (button) button.disabled = off;
-        }
+        for (const field of FIELDS) this.menus[field]?.sync();
     }
 
     getInput(field: StyleField): HTMLInputElement {

@@ -394,7 +394,15 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
             const chip = draft().querySelector('.task-hub__tag-chip--cascade');
             const out = {
                 opened: view(),
-                color: { placeholder: colorInput().placeholder, from: colorInput().closest('.tv-form__row').querySelector('.task-hub__source').textContent },
+                // The menu's head says where the value is from; with no line to open, its item is greyed, not left out.
+                color: (() => {
+                    colorInput().closest('.tv-form__row').querySelector('button.tv-form__menu-button').click();
+                    const titles = menuTitles();
+                    const item = menuItems().find(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.openInheritedLine'))});
+                    const greyed = item ? !!item.disabled : null;
+                    closeMenus();
+                    return { placeholder: colorInput().placeholder, head: titles[0], greyed };
+                })(),
                 property: {
                     value: propRow.querySelector('input.tv-ctrl__text-input')?.value ?? null,
                     placeholder: propRow.querySelector('input.tv-ctrl__text-input')?.placeholder ?? null,
@@ -410,10 +418,9 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
                 },
                 tag: { text: chip.textContent, label: chip.getAttribute('aria-label') },
             };
-            // Each label pressed: none has a line to open.
+            // The tag pressed: it has no line to open either.
             R.leafCount = app.workspace.getLeavesOfType('markdown').length;
             R.activeFile = app.workspace.getActiveFile()?.path ?? null;
-            colorInput().closest('.tv-form__row').querySelector('.task-hub__source').click();
             chip.click();
             return JSON.stringify(out);
         `);
@@ -438,7 +445,7 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
             buttons: [tr('modal.cancel'), tr('modal.create')],
             titles: [tr('modal.newTask.title')],
         });
-        expect(steps.color).toEqual({ placeholder: 'red', from: section });
+        expect(steps.color).toEqual({ placeholder: 'red', head: tr('modal.hub.fromSection'), greyed: true });
         // The inherited value is the empty field's placeholder, framed dashed, as a row's inherited property is.
         expect(steps.property).toEqual({ value: '', placeholder: 'lab', dashed: true, open: { greyed: true } });
         expect(steps.tag).toEqual({ text: '#sec', label: tr('modal.hub.cascadeTagLocked', { source: section }) });

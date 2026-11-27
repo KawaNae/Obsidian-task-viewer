@@ -259,29 +259,6 @@
     pointer-events: none;
 }
 
-.task-hub__source {
-    flex: 0 0 auto;
-    font-size: 0.75em;
-    color: var(--tv-text-faint);
-    cursor: pointer;
-    text-decoration: underline dotted;
-}
-
-.task-hub__source:hover {
-    color: var(--tv-text-muted);
-}
-
-/* Where a value is inherited from, with no row whose line could be opened:
- * said, not offered to press. */
-.task-hub__source--plain {
-    cursor: default;
-    text-decoration: none;
-}
-
-.task-hub__source--plain:hover {
-    color: var(--tv-text-faint);
-}
-
 /* --- A custom property's list: an item a line, as the note writes it --- */
 .task-hub__list {
     display: flex;
@@ -370,28 +347,6 @@
  * them. */
 .tv-ctrl .task-hub__props button.tv-form__clear-button {
     padding: 0;
-}
-
-/* Hide an inherited value: an icon beside the source, drawn as a row's × is */
-.tv-ctrl .task-hub__hide {
-    width: 16px;
-    height: 16px;
-    border: none;
-    border-radius: 50%;
-}
-
-.tv-ctrl .task-hub__hide:hover {
-    background-color: var(--tv-bg-primary);
-}
-
-.task-hub__hide .svg-icon {
-    width: 10px;
-    height: 10px;
-}
-
-.task-hub__hide.is-hidden,
-.task-hub__prop-remove.is-hidden {
-    display: none;
 }
 
 /* --- The line above the create (CreateLine): what the create does, why it

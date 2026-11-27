@@ -20,18 +20,6 @@ export type CascadeSourceKind = 'file' | 'section';
  */
 export class CascadeSource {
     /**
-     * color / linestyle / mask の cascade 出所。受け継いだ値なし（上の層が
-     * `- tv-color::` で隠した値）も、値と同じく隠した層を出所として言う。
-     * 何も受け継がない、または自身の値（値なしを含む）があれば null
-     */
-    static forStyleField(task: Task, field: 'color' | 'linestyle' | 'mask'): CascadeSourceKind | null {
-        if (task[field] !== undefined) return null;
-        const from = task.inheritedFrom?.fields[field];
-        if (task.cascadeContext?.[field] === undefined && !from) return null;
-        return kindOf(from);
-    }
-
-    /**
      * Where what the layers above give a built-in (a date, a time, the due,
      * a style) is written, whether or not the row's own value wins over it:
      * the layer whose value won, or that hides the one above it with no
@@ -62,18 +50,9 @@ export class CascadeSource {
         return kindOf(task.inheritedFrom?.properties[PropertyKey.fold(key)]);
     }
 
-    /** What a field shows of where its inherited value comes from: the note, or a section of it. */
+    /** What an inherited tag's chip says of where it comes from: the note, or a section of it. */
     static label(source: CascadeSourceKind): string {
         return source === 'file' ? t('modal.hub.inheritedFromFile') : t('modal.hub.inheritedFromSection');
-    }
-
-    /**
-     * The line an inherited style value is written on (`frontmatterKey` the
-     * key the settings name for it), to open in the editor; null when no
-     * layer is recorded for it.
-     */
-    static lineOfStyleField(task: Task, field: 'color' | 'linestyle' | 'mask', frontmatterKey: string): LineTarget | null {
-        return targetOf(task.inheritedFrom?.fields[field], frontmatterKey);
     }
 
     /** The line of the layer that first adds the inherited tag `tag`. */

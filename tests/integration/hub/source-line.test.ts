@@ -1,6 +1,6 @@
 /**
  * The hub opens the line a value is written on, in the running E2E vault:
- * a style's source label, a property's menu ("Open inherited line") and a
+ * the menu of a style and of a property ("Open inherited line") and a
  * finding's button open the row's note with the cursor on that line, and a
  * frontmatter key the Properties view shows is lit there. A style's value
  * written above the first heading is said to be the file's, as the
@@ -53,6 +53,9 @@ const valueInput = key => rowOf(key).querySelector('input.tv-ctrl__text-input');
 /** Choose the item titled \`title\` from the menu of the property's row \`key\`. */
 const pickOf = (key, title) => { rowOf(key).querySelector('button.tv-form__menu-button').click(); menuItem(i => i.titleEl?.textContent === title); };
 const openInherited = key => pickOf(key, ${JSON.stringify(tr('modal.hub.openInheritedLine'))});
+const colorRow = () => hub().querySelector('.tv-form__input-with-picker--color').closest('.tv-form__row');
+/** Open the line of a style's row from its menu. */
+const openStyleLine = row => { row.querySelector('button.tv-form__menu-button').click(); menuItem(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.openInheritedLine'))}); };
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const type = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 const leave = async input => { input.dispatchEvent(new FocusEvent('blur')); await sleep(600); };
@@ -113,10 +116,10 @@ describe('the hub opens the line a value is written on', () => {
         expect(line).toBe(4);
     });
 
-    it('opens a section\'s style line, and the line that adds an inherited tag', () => {
+    it('opens a section\'s style line from its menu, and the line that adds an inherited tag', () => {
         openHub('親');
         const color = run<number>(`
-            hub().querySelector('.tv-form__input-with-picker--color').closest('.tv-form__row').querySelector('.task-hub__source').click();
+            openStyleLine(colorRow());
             return await cursorLine();
         `);
         expect(color).toBe(7);
@@ -177,7 +180,7 @@ describe('the hub opens the line a value is written on', () => {
     it('lights a frontmatter key in the Properties view, or puts the cursor on its line in source mode', () => {
         openHub('親');
         const shown = run<{ lit: boolean; cursor: number; properties: boolean }>(`
-            rowOf(${JSON.stringify(tr('modal.hub.mask'))}).querySelector('.task-hub__source').click();
+            openStyleLine(rowOf(${JSON.stringify(tr('modal.hub.mask'))}));
             await until(() => noteView() && !hub());
             await sleep(200);
             const view = noteView();
