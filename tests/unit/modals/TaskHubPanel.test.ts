@@ -85,6 +85,7 @@ vi.mock('../../../src/modals/hub/TaskHubForm', () => ({
         sayWrite() { }
         sayPlace() { }
         putTyped() { return true; }
+        saveTyped() { }
         create() { }
         notWritten = vi.fn();
         edited() { }

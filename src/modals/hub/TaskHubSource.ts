@@ -58,7 +58,17 @@ export interface SeatView {
 export interface SourceSeat {
     /** The row the switch is drawn for; undefined once the hub lost it. */
     row(): SeatRow | undefined;
-    /** What the source opens on; null, it gives up, the seat telling why. `live` says whether the opening is still wanted. */
+    /**
+     * What the source opens on; null, it gives up, the seat telling why.
+     * `live` says whether the opening is still wanted. Every seat first
+     * saves what is typed in the hub's fields itself, so the source opens on
+     * what was typed: the switch saves it by this alone. A seat on the row
+     * the note holds writes what reads and leaves a value that cannot be
+     * saved typed in its field (`HubForm.saveTyped`), and opens. The seat of
+     * a move opens on a draft that takes what is typed, so it opens only
+     * once all of it is put in (`HubForm.putTyped`); a value that cannot be
+     * keeps it from opening, the focus taken to it.
+     */
     open(live: () => boolean): Promise<SourceOpening | null>;
     /** The source opened on what `open` handed. */
     opened(source: OpenSource): void;

@@ -181,7 +181,7 @@ export class TaskHubSourceView implements SourceSurface {
 function modeButton(toggle: HTMLElement, icon: string, label: string): HTMLButtonElement {
     const btn = toggle.createEl('button', { cls: 'task-hub__mode-button', attr: { type: 'button', 'aria-label': label } });
     setIcon(btn, icon);
-    // The source opens by saving what is typed in the form (`putTyped`).
+    // The source opens by saving what is typed in the form (`SourceSeat.open`).
     takesTyped(btn);
     return btn;
 }

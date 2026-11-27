@@ -464,6 +464,7 @@ class PlaceOnly implements HubForm {
     putTyped(): boolean {
         return false;
     }
+    saveTyped(): void { }
     notWritten(): void { }
     edited(): void { }
     focusPlace(): void { }

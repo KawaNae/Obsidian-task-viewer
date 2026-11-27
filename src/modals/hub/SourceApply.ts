@@ -8,6 +8,8 @@ import type { OpenSource, SeatRow, SeatView, SourceOpening, SourceSeat } from '.
 export interface SourceApplyHost {
     /** The row as the hub follows it in the index; undefined once the hub lost it. */
     row(): Task | undefined;
+    /** Save what is typed in the fields as a blur would (`HubForm.saveTyped`): a value that cannot be saved stays typed. */
+    saveTyped(): void;
     /** Resolves once the hub's writes asked so far are done (`RowHost.drained`). */
     drained(): Promise<void>;
     /** Whether the index's copy of the row is the row on the disk (`Operations.confirmTask`); told the user when not. */
@@ -30,11 +32,16 @@ type After = 'view' | 'close';
  * subtree on the disk, written from a draft when the user applies it, and
  * nowhere else: not when the source or the hub is left.
  *
- * - The source opens once the hub's writes asked so far are done, the hub's
- *   copy confirmed as the row on the disk (`confirm`), on the subtree the
- *   index holds then: that subtree is the base every apply is checked
- *   against. The form is shut while the source is open, since two ways of
- *   writing one row would have one of them refused.
+ * - The source opens once what is typed in the fields is saved as a blur
+ *   would (`SourceSeat.open`): what reads is written, and a value that
+ *   cannot be saved stays typed in its field, kept from opening by nothing,
+ *   as the row on the disk does not hold it. Then once the hub's writes
+ *   asked so far are done, the hub's copy confirmed as the row on the disk
+ *   (`confirm`), on the subtree the index holds then: that subtree is the
+ *   base every apply is checked against. The form is shut while the source
+ *   is open, since two ways of writing one row would have one of them
+ *   refused; what stays typed is there once back on the card, and a close
+ *   asks of it then.
  * - An apply writes the parent and the children in one write, or leaves at
  *   once when the draft is the subtree opened. A refused draft stays, with
  *   why under it; the same draft again is not written again, since nothing
@@ -78,6 +85,7 @@ export class SourceApply implements SourceSeat {
     }
 
     async open(live: () => boolean): Promise<SourceOpening | null> {
+        this.host.saveTyped();
         await this.host.drained();
         const known = this.host.row();
         const copy = known && this.host.reread(known.id);

@@ -444,7 +444,7 @@ export class TaskHubForm implements HubForm {
     /** Save every field for the step `after`, as a blur would: whether it goes on, the question put where it would lose anything. */
     private saveFor(after: 'close' | 'discard'): boolean {
         if (!this.guard.request(after)) return false;
-        for (const part of this.parts()) part.save();
+        this.saveTyped();
         return this.guard.request(after);
     }
 
@@ -470,7 +470,7 @@ export class TaskHubForm implements HubForm {
             this.focusTo({ to: first });
             return;
         }
-        for (const part of this.parts()) part.save();
+        this.saveTyped();
         draft.write();
     }
 
@@ -487,9 +487,19 @@ export class TaskHubForm implements HubForm {
             this.focusTo({ to: first.input });
             return false;
         }
-        for (const part of this.parts()) part.save();
+        this.saveTyped();
         this.guard.withdraw();
         return true;
+    }
+
+    /**
+     * Save what is typed in every field as a blur would, with no question
+     * and nothing stopped (`HubForm.saveTyped`): a value that cannot be saved
+     * stays typed, as a blur leaves it. While the row's values
+     * are shut nothing is saved from their fields.
+     */
+    saveTyped(): void {
+        for (const part of this.parts()) part.save();
     }
 
     /**

@@ -56,6 +56,19 @@ export interface HubForm {
      */
     putTyped(): boolean;
     /**
+     * Save what is typed in every field as a blur would: what reads is put
+     * in, and a value that cannot be saved stays typed in its field, as a
+     * blur leaves it. Nothing is asked and nothing stops: what goes on next
+     * goes on.
+     *
+     * The form saves what is typed by this alone, at four doors that differ
+     * in what a value that cannot be saved does: here it stays and nothing
+     * stops; at `putTyped` and `write` it stops all, its field taking the
+     * focus; at a close (`beforeClose`) and cancel it stops the step and is
+     * asked about.
+     */
+    saveTyped(): void;
+    /**
      * A write ended unwritten, the fields open again and the place read:
      * the focus goes where what keeps it from being written is, unless it is
      * in the hub already. Where a write may be asked again

@@ -85,6 +85,7 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         showDraft: vi.fn(),
         write: vi.fn(),
         putTyped: vi.fn(() => true),
+        saveTyped: vi.fn(),
         notWritten: vi.fn(),
         edited: vi.fn(),
         focusPlace: vi.fn(),
