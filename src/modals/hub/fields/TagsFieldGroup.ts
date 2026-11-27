@@ -13,6 +13,7 @@ import { TagRule } from '../../../services/parsing/utils/TagRule';
 import { optional } from '../../../utils/values/Read';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
 import { ValueSuggest } from '../../../suggest/ValueSuggest';
+import { pressKey } from '../../../views/sharedUI/PressCommit';
 import type { ClosingPart, FieldGroupContext, UnsavedField } from './FieldGroupContext';
 
 const ADD_TAGS = optional(TagInput);
@@ -69,6 +70,7 @@ export class TagsFieldGroup implements ClosingPart {
                     setIcon(removeBtn.createSpan(), 'x');
                     removeBtn.setAttribute('aria-label', t('modal.hub.removeTag', { tag }));
                     removeBtn.disabled = shut;
+                    pressKey(removeBtn, `tags:${tag}:remove`);
                     removeBtn.addEventListener('click', () => this.commit(task.tags.filter(x => x !== tag)));
                 } else {
                     const source = CascadeSource.forTag(task, tag);
@@ -77,7 +79,12 @@ export class TagsFieldGroup implements ClosingPart {
                     chip.setAttribute('aria-label', t('modal.hub.cascadeTagLocked', { source: CascadeSource.label(source) }));
                     // The chip opens the line that adds the tag, when there is a row to open.
                     const open = this.ctx.openSource;
-                    if (open) chip.addEventListener('click', () => open(row => CascadeSource.lineOfTag(row, tag)));
+                    if (open) {
+                        // Pressed as a button is: it opens the line.
+                        chip.setAttribute('role', 'button');
+                        pressKey(chip, `tags:${tag}:source`);
+                        chip.addEventListener('click', () => open(row => CascadeSource.lineOfTag(row, tag)));
+                    }
                 }
             }
         }

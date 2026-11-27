@@ -13,6 +13,7 @@ import { ClearButton } from '../../form/ClearButton';
 import { createFormRow } from '../../form/formRow';
 import { onFormEnter } from '../../form/formEnter';
 import { bindField, type BoundField, type Written } from '../../form/bindField';
+import { ownCommit, pressKey } from '../../../views/sharedUI/PressCommit';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { ValueSuggest, type ValueSuggestOptions } from '../../../suggest/ValueSuggest';
 import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './FieldGroupContext';
@@ -83,7 +84,7 @@ export class PropertiesFieldGroup implements ClosingPart {
     /** Each property's value field, bound: what a close saves. */
     private valueBound = new Map<string, BoundField<PropertyLineValue>>();
     /** The add row as last built: its fields, what its key reads, and its commit. */
-    private addRow: { keyInput: HTMLInputElement; valueInput: HTMLInputElement; readKey(): Read<string> | null; commit(): void } | null = null;
+    private addRow: { keyInput: HTMLInputElement; valueInput: HTMLInputElement; readKey(): Read<string> | null; commit(): boolean } | null = null;
     /** What is typed in the add row and not yet added: kept across a rebuild. */
     private draft = { key: '', value: '' };
     /**
@@ -220,11 +221,16 @@ export class PropertiesFieldGroup implements ClosingPart {
             pick: (val) => { valueInput.value = val; commitAdd(); },
         });
 
-        const commitAdd = () => {
+        /**
+         * Add what the row holds: false when its key does not read (said
+         * under it), true once added, or with no key typed (nothing to add).
+         */
+        const commitAdd = (): boolean => {
             const key = readKey();
-            if (!key?.ok) return;
+            if (!key) return true;
+            if (!key.ok) return false;
             const value = PropertyValueInput.read(valueInput.value);
-            if (!value.ok) return;
+            if (!value.ok) return false;
             const typed = { key: keyInput.value, value: valueInput.value };
             const write = this.setValue(key.value, value.value, 'propKey');
             this.draft = { key: '', value: '' };
@@ -243,10 +249,17 @@ export class PropertiesFieldGroup implements ClosingPart {
                     row.valueInput.value = typed.value;
                 }
             });
+            return true;
         };
         this.addRow = { keyInput, valueInput, readKey, commit: commitAdd };
+        // Both fields commit the row as one, as its Enter does: a press elsewhere commits it first.
+        const addCommit = {
+            typed: () => keyInput.value.trim() !== '' || valueInput.value.trim() !== '',
+            commit: commitAdd,
+        };
         for (const [input, suggest] of [[keyInput, keySuggest], [valueInput, valueSuggest]] as const) {
             onFormEnter(input, commitAdd, { takesEnter: () => suggest.listShown, signal });
+            ownCommit(input, addCommit, signal);
         }
         // blur 確定ルール: key があれば value 空でも確定。値のないプロパティ
         // （`- key::`）として書き、上の層の値を隠す。
@@ -382,6 +395,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             attr: { type: 'button', 'aria-label': t('modal.hub.propertyMenu', { key }) },
         });
         setIcon(button.createSpan(), 'more-horizontal');
+        pressKey(button, `${propField(key)}:menu`);
         button.disabled = shut;
         button.addEventListener('click', () => {
             if (this.ctx.isShut()) return;
@@ -500,6 +514,7 @@ export class PropertiesFieldGroup implements ClosingPart {
                 value.commit();
             },
             focusesField: false,
+            key: `${propField(key)}:clear`,
         });
 
         return (now) => {

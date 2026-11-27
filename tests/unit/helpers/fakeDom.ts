@@ -9,6 +9,7 @@ type Listener = (e: Event) => void;
 export class FakeEl {
     readonly children: FakeEl[] = [];
     readonly attrs = new Map<string, string>();
+    readonly dataset: Record<string, string> = {};
     private readonly listeners = new Map<string, Listener[]>();
     readonly classList: { contains(c: string): boolean; toggle(c: string, on?: boolean): void };
     readonly classes = new Set<string>();

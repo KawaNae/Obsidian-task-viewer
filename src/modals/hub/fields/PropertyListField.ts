@@ -7,6 +7,7 @@ import { bindField, type BoundField } from '../../form/bindField';
 import { ClearButton } from '../../form/ClearButton';
 import { readIssue, type FormIssue } from '../../form/FormIssue';
 import { ValueSuggest } from '../../../suggest/ValueSuggest';
+import { carryPressKeys } from '../../../views/sharedUI/PressCommit';
 import type { HubField, UnsavedField } from './FieldGroupContext';
 
 const ITEM = optional(PropertyItemInput);
@@ -158,6 +159,7 @@ export class PropertyListField {
                     clear: () => this.writeKept(...removed(this.opts.items, index), null),
                     focusesField: false,
                     label: t('modal.hub.removeItem', { item: item.spelling }),
+                    key: this.itemKey(index),
                 });
             }
         });
@@ -262,6 +264,13 @@ export class PropertyListField {
      */
     private writeKept(items: PropertyScalar[], order: readonly number[], lost: ListFocus | null = 'add'): void {
         const doc = this.el.ownerDocument;
+        // A press under way on an item's × follows its item, as the focus does.
+        const moves = new Map<string, string | null>();
+        for (let from = 0; from < this.opts.items.length; from++) {
+            const to = order.indexOf(from);
+            if (to !== from) moves.set(this.itemKey(from), to === -1 ? null : this.itemKey(to));
+        }
+        carryPressKeys(doc, moves);
         const active = doc.activeElement && doc.activeElement !== doc.body ? doc.activeElement : this.leftFor;
         let focus: ListFocus | undefined;
         if (active && active === this.addInput) focus = 'add';
@@ -273,6 +282,11 @@ export class PropertyListField {
             }
         }
         this.opts.write(items, focus);
+    }
+
+    /** The key of the × of the item at `index` (`pressKey`). */
+    private itemKey(index: number): string {
+        return `${this.opts.at}:item:${index}`;
     }
 
     private sayOf(source: string, input: HTMLInputElement, issue: Issue | null): void {
