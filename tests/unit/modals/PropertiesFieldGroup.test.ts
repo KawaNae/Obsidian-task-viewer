@@ -671,6 +671,50 @@ describe('a button pressed while another field of the properties holds what was 
         expect(s.writes).toHaveLength(2);
     });
 
+    it('gives the focus back to another row\'s value as a list\'s item × builds the rows anew, nothing typed: the field built anew, its caret where it was', () => {
+        const s = setUp(byKey({ Area: text('lab'), docs: list('a', 'b') }));
+        const before = s.valueOf('Area');
+        before.focus();
+        before.setSelectionRange(1, 2);
+        itemX(s, 'docs', 'b').press();
+        expect(s.writes.map(valuesOf)).toEqual([{ Area: text('lab'), docs: list('a') }]);
+        expect(s.valueOf('Area')).not.toBe(before);
+        expect(s.doc.activeElement).toBe(s.valueOf('Area'));
+        expect([s.valueOf('Area').selectionStart, s.valueOf('Area').selectionEnd]).toEqual([1, 2]);
+    });
+
+    it('writes another row\'s value typed, then the list, the focus back in that value, its caret at the end of what was typed', () => {
+        const s = setUp(byKey({ Area: text('lab'), docs: list('a', 'b') }));
+        s.valueOf('Area').focus();
+        s.valueOf('Area').type('lab2');
+        s.valueOf('Area').setSelectionRange(4, 4);
+        itemX(s, 'docs', 'b').press();
+        expect(s.writes.map(valuesOf)).toEqual([{ Area: text('lab2'), docs: list('a', 'b') }, { Area: text('lab2'), docs: list('a') }]);
+        expect(s.doc.activeElement).toBe(s.valueOf('Area'));
+        expect([s.valueOf('Area').value, s.valueOf('Area').selectionStart]).toEqual(['lab2', 4]);
+    });
+
+    it('gives the focus back to the add row\'s value, and to another list\'s add field, as a list\'s item × builds the rows anew', () => {
+        const s = setUp(byKey({ docs: list('a', 'b'), crew: list('x') }));
+        s.addValue().focus();
+        itemX(s, 'docs', 'b').press();
+        expect(s.doc.activeElement).toBe(s.addValue());
+        const crewAdd = () => s.rowOf('crew')!.find('task-hub__list-add')!;
+        crewAdd().focus();
+        itemX(s, 'docs', 'a').press();
+        expect(s.writes.map(valuesOf)).toEqual([{ docs: list('a'), crew: list('x') }, { docs: NONE, crew: list('x') }]);
+        expect(s.doc.activeElement).toBe(crewAdd());
+    });
+
+    it('leaves the focus where it is in a text field of the surface out of the properties, as a list\'s item × builds them anew', () => {
+        const s = setUp(byKey({ docs: list('a', 'b') }));
+        const name = s.root.createEl('input', { type: 'text' });
+        name.focus();
+        itemX(s, 'docs', 'b').press();
+        expect(s.writes.map(valuesOf)).toEqual([{ docs: list('a') }]);
+        expect(s.doc.activeElement).toBe(name);
+    });
+
     it('commits nothing else as a field\'s own × is pressed with the focus in it: the field emptied written once, the focus out of it', () => {
         const s = setUp(byKey({ Area: text('lab'), docs: list('a') }));
         const field = s.valueOf('Area');
