@@ -102,8 +102,6 @@ export class PropertiesFieldGroup implements ClosingPart {
      * let go once the row has its own value.
      */
     private drafts = new Map<string, PropertyScalar[]>();
-    /** Where the focus goes once the rows are built anew: a list's item or add field. */
-    private focusAfter: { folded: string; focus: ListFocus } | null = null;
     /** Each row as last built, by key folded, in order: what it was built as (`shapeOf`), and how its look is put on it again. */
     private drawn = new Map<string, DrawnRow>();
     /** The rows as built no longer stand for the rows as they are, and are built anew once the focus leaves them. */
@@ -281,10 +279,6 @@ export class PropertiesFieldGroup implements ClosingPart {
         valueInput.addEventListener('blur', blurCommit, { signal });
 
         this.ctx.issues.redraw();
-
-        const focus = this.focusAfter;
-        this.focusAfter = null;
-        if (focus) this.lists.get(focus.folded)?.focusTarget(focus.focus)?.focus();
     }
 
     /** The rows as the task, its drafts and its findings are now (`PropertyRows`). */
@@ -563,15 +557,53 @@ export class PropertiesFieldGroup implements ClosingPart {
      * Write `items` as the row's own list of the property `folded` (none is
      * no value, the line kept and its items' lines taken out: over an
      * inherited value, it hides it), the draft written so let go, and build
-     * the rows anew with the focus at `focus` in the list. Nothing, the rows
-     * left as they are, from a list that no longer stands for its row
-     * (`writeField`).
+     * the rows anew with the focus at `focus` in the list. With the focus in
+     * a field of the rows out of the list (another row's value, another
+     * list, the add row), as a press on the list's item × leaves it, that
+     * field built anew takes it back, its caret where it was: the on-screen
+     * keyboard stays up. Nothing, the rows left as they are, from a list
+     * that no longer stands for its row (`writeField`).
      */
     private writeList(folded: string, items: PropertyScalar[], focus?: ListFocus): void {
         if (this.writeField(folded, items.length === 0 ? NO_VALUE : { type: 'list', items }) === false) return;
         this.drafts.delete(folded);
-        if (focus !== undefined) this.focusAfter = { folded, focus };
+        const after = focus !== undefined
+            ? () => this.lists.get(folded)?.focusTarget(focus)?.focus()
+            : this.focusBack(folded);
         this.render(true);
+        after?.();
+    }
+
+    /**
+     * How to give the focus back to the field of the rows it is in, once
+     * they are built anew, out of the list `folded`: the field standing for
+     * the same thing in the rows built anew, its caret as it was. Null while
+     * the focus is in no field of the rows, or in that list (which says
+     * where its focus goes).
+     */
+    private focusBack(folded: string): (() => void) | null {
+        const active = this.sectionEl.ownerDocument.activeElement as HTMLInputElement | null;
+        if (!active || !this.sectionEl.contains(active)) return null;
+        let find: (() => HTMLInputElement | null | undefined) | null = null;
+        for (const [key, input] of this.valueInputs) {
+            if (input === active) find = () => this.valueInputs.get(key);
+        }
+        if (this.addRow?.keyInput === active) find = () => this.addRow?.keyInput;
+        if (this.addRow?.valueInput === active) find = () => this.addRow?.valueInput;
+        for (const [key, list] of this.lists) {
+            const at = list.focusOf(active);
+            if (at === null) continue;
+            if (key === folded) return null;
+            find = () => this.lists.get(key)?.focusTarget(at);
+        }
+        if (!find) return null;
+        const { selectionStart: start, selectionEnd: end, selectionDirection: direction } = active;
+        return () => {
+            const to = find?.();
+            if (!to) return;
+            to.focus();
+            if (start !== null && end !== null) to.setSelectionRange(start, end, direction ?? undefined);
+        };
     }
 
     /**

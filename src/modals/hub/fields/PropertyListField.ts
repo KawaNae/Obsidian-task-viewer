@@ -272,16 +272,22 @@ export class PropertyListField {
         }
         carryPressKeys(doc, moves);
         const active = doc.activeElement && doc.activeElement !== doc.body ? doc.activeElement : this.leftFor;
+        const from = this.focusOf(active);
         let focus: ListFocus | undefined;
-        if (active && active === this.addInput) focus = 'add';
-        else {
-            const from = this.itemInputs.findIndex(input => input === active);
-            if (from !== -1) {
-                const to = order.indexOf(from);
-                focus = to === -1 ? lost ?? undefined : to;
-            }
+        if (from === 'add') focus = 'add';
+        else if (from !== null) {
+            const to = order.indexOf(from);
+            focus = to === -1 ? lost ?? undefined : to;
         }
         this.opts.write(items, focus);
+    }
+
+    /** Which of the field's inputs `el` is: an item's place, or the add field; null for none of them. */
+    focusOf(el: Element | null): ListFocus | null {
+        if (!el) return null;
+        if (el === this.addInput) return 'add';
+        const at = this.itemInputs.findIndex(input => input === el);
+        return at === -1 ? null : at;
     }
 
     /** The key of the × of the item at `index` (`pressKey`). */

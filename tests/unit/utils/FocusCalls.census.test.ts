@@ -88,8 +88,13 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
     },
     {
         file: 'modals/hub/fields/PropertiesFieldGroup.ts',
-        line: 'if (focus) this.lists.get(focus.folded)?.focusTarget(focus.focus)?.focus();',
+        line: '? () => this.lists.get(folded)?.focusTarget(focus)?.focus()',
         why: 'a property\'s list drawn again on its item written: the focus goes on where the list says the edit goes on',
+    },
+    {
+        file: 'modals/hub/fields/PropertiesFieldGroup.ts',
+        line: 'to.focus();',
+        why: 'the properties drawn again on a list written with the focus in another of their fields: the field built anew keeps the focus, its caret where it was',
     },
     {
         file: 'modals/hub/fields/PropertiesFieldGroup.ts',
