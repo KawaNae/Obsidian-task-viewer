@@ -40,18 +40,18 @@ describe('CascadeSource', () => {
         expect(CascadeSource.forTag(task('row'), 'sec')).toBe('section');
     });
 
-    it('says a style is the layer\'s that won it, and none for a row that has its own', () => {
-        expect(CascadeSource.forStyleField(task('row'), 'color')).toBe('file');
-        expect(CascadeSource.forStyleField(task('row'), 'mask')).toBe('section');
-        expect(CascadeSource.forStyleField(task('row'), 'linestyle')).toBeNull();
-        expect(CascadeSource.forStyleField(task('own'), 'mask')).toBeNull();
+    it('says a style is the layer\'s that won it, whether or not the row has its own', () => {
+        expect(CascadeSource.forField(task('row'), 'color')).toBe('file');
+        expect(CascadeSource.forField(task('row'), 'mask')).toBe('section');
+        expect(CascadeSource.forField(task('row'), 'linestyle')).toBeNull();
+        expect(CascadeSource.forField(task('own'), 'mask')).toBe('section');
     });
 
-    it('says an inherited no value is the layer\'s that hid it, and none for a row\'s own no value', () => {
+    it('says an inherited no value is the layer\'s that hid it, under a row\'s own no value too', () => {
         expect(task('under hidden').cascadeContext?.color).toBeUndefined();
-        expect(CascadeSource.forStyleField(task('under hidden'), 'color')).toBe('section');
-        expect(CascadeSource.lineOfStyleField(task('under hidden'), 'color', 'tv-color')).toEqual({ line: 13 });
-        expect(CascadeSource.forStyleField(task('own none'), 'color')).toBeNull();
+        expect(CascadeSource.forField(task('under hidden'), 'color')).toBe('section');
+        expect(CascadeSource.lineOfField(task('under hidden'), 'color', 'tv-color')).toEqual({ line: 13 });
+        expect(CascadeSource.forField(task('own none'), 'color')).toBe('section');
     });
 
     it('says a property is the layer\'s that won it', () => {
@@ -59,9 +59,9 @@ describe('CascadeSource', () => {
     });
 
     it('gives the line a value is written on, a frontmatter key with its key', () => {
-        expect(CascadeSource.lineOfStyleField(task('row'), 'color', 'tv-color')).toEqual({ line: 2, frontmatterKey: 'tv-color' });
-        expect(CascadeSource.lineOfStyleField(task('row'), 'mask', 'tv-mask')).toEqual({ line: 7 });
-        expect(CascadeSource.lineOfStyleField(task('row'), 'linestyle', 'tv-linestyle')).toBeNull();
+        expect(CascadeSource.lineOfField(task('row'), 'color', 'tv-color')).toEqual({ line: 2, frontmatterKey: 'tv-color' });
+        expect(CascadeSource.lineOfField(task('row'), 'mask', 'tv-mask')).toEqual({ line: 7 });
+        expect(CascadeSource.lineOfField(task('row'), 'linestyle', 'tv-linestyle')).toBeNull();
         expect(CascadeSource.lineOfTag(task('row'), 'sec')).toEqual({ line: 6 });
         expect(CascadeSource.lineOfTag(task('row'), 'file')).toEqual({ line: 1, frontmatterKey: 'tags' });
         expect(CascadeSource.lineOfProperty(task('row'), 'OWNER')).toEqual({ line: 8 });
@@ -81,19 +81,12 @@ describe('CascadeSource', () => {
             '- [ ] under',
         ].join('\n'));
         expect(CascadeSource.forProperty(root('under'), '時給')).toBe('file');
-        expect(CascadeSource.forStyleField(root('under'), 'mask')).toBe('file');
-        expect(CascadeSource.forStyleField(root('under'), 'color')).toBe('section');
+        expect(CascadeSource.forField(root('under'), 'mask')).toBe('file');
+        expect(CascadeSource.forField(root('under'), 'color')).toBe('section');
         expect(CascadeSource.forTag(root('under'), 'top')).toBe('file');
         expect(CascadeSource.lineOfProperty(root('under'), '時給')).toEqual({ line: 4 });
-        expect(CascadeSource.lineOfStyleField(root('under'), 'mask', 'tv-mask')).toEqual({ line: 5 });
+        expect(CascadeSource.lineOfField(root('under'), 'mask', 'tv-mask')).toEqual({ line: 5 });
         expect(CascadeSource.lineOfTag(root('under'), 'top')).toEqual({ line: 6 });
-    });
-
-    it('says where a built-in is given, whether or not the row says its own, and none for one nothing gives', () => {
-        expect(CascadeSource.forField(task('own'), 'mask')).toBe('section');
-        expect(CascadeSource.forField(task('own none'), 'color')).toBe('section');
-        expect(CascadeSource.forField(task('row'), 'color')).toBe('file');
-        expect(CascadeSource.forField(task('row'), 'linestyle')).toBeNull();
     });
 
     it('opens the line a date and its time are given on by the date\'s key', () => {

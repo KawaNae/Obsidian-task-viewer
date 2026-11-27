@@ -5,8 +5,7 @@
    ====================================================== */
 
 /* A value offered for the frontmatter: the box, the value, and where it
- * comes from as the hub says where a value is inherited from
- * (task-hub__source). */
+ * comes from. */
 .tv-send__candidate {
     flex: 1 1 0;
     min-width: 0;

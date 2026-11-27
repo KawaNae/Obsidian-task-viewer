@@ -13,7 +13,7 @@
  *   as the field's commit is done before the button is looked for: the
  *   status, a date's ×, a tab, the button that shows or hides the line
  *   above the create, a property's menu button, a list's item ×, the
- *   color's hide and a tag's ×. The field keeps the focus but for the tab,
+ *   color's menu button and a tag's ×. The field keeps the focus but for the tab,
  *   which takes it.
  * - On a row, whose fields are drawn again once the note's write comes back
  *   from the index: a property's menu stays open, and a list's item × takes
@@ -49,7 +49,7 @@ import { REAL_INPUT } from '../helpers/real-input';
 
 const TEST_FILE = 'test-int-hub-press-typed-parts.md';
 
-/** The section gives a color: a task under it shows the button that hides it. */
+/** The section gives a color: a task under it shows the menu that hides it. */
 const LINES = [
     '## Work',
     '- tv-color:: red',
@@ -89,8 +89,9 @@ const tagChips = () => [...hub().querySelectorAll('.task-hub__tag-chip')].map(c 
 const tagRemove = tag => [...hub().querySelectorAll('.task-hub__tag-chip')].find(c => c.textContent === '#' + tag)?.querySelector('.tv-ctrl__pill-remove') ?? null;
 const colorInput = () => hub().querySelector('.tv-form__input-with-picker--color input.tv-ctrl__text-input');
 const colorRow = () => colorInput().closest('.tv-form__row');
-const hideColor = () => colorRow().querySelector('.task-hub__hide');
-const colorHidden = () => !colorRow().querySelector('.task-hub__prop-remove').classList.contains('is-hidden');
+const colorMenu = () => colorRow().querySelector('button.tv-form__menu-button');
+/** The color's own no value, which hides the value it inherits, drawn as that value struck through. */
+const colorHidden = () => { const struck = colorRow().querySelector('.tv-form__struck'); return shown(struck) && struck.textContent === 'red'; };
 const statusPill = () => hub().querySelector('.task-hub__status-pill');
 const dateInput = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input');
 const dateClear = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' .tv-form__clear-button');
@@ -306,6 +307,22 @@ describe('a button of another part pressed with a field typed in, on a task not 
         return JSON.stringify({ acted, ...seen, focus: focusNow(), card: card()?.textContent ?? null });
     `);
 
+    /** As \`pressed\`, the color's menu button pressed; then no value is chosen in its menu, and the color seen. */
+    const pickedInColor = (label: string, field: string, typed: string, read: string) => run<Record<string, unknown>>(label, `
+        await openDraft();
+        typeIn(${field}, ${JSON.stringify(typed)});
+        watch();
+        press(colorMenu());
+        const acted = await saw(() => R.menus > 0);
+        await nextFrame();
+        const seen = await settled(() => (${read}));
+        const menu = menuTitles();
+        const focus = focusNow();
+        menuItem(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.setNoValue'))});
+        const hidden = await saw(() => colorHidden());
+        return JSON.stringify({ acted, ...seen, menu, focus, hidden, card: card()?.textContent ?? null });
+    `);
+
     it('the name typed, the status: the menu open once, the name in the draft, the focus in the name', () => {
         const out = pressed('draft name, status', 'nameInput()', '新しい名前', 'statusPill()', 'R.menus > 0', '{}');
         expect(out).toMatchObject({ acted: true, menus: 1, focus: 'name' });
@@ -348,9 +365,9 @@ describe('a button of another part pressed with a field typed in, on a task not 
         expect(out).toMatchObject({ acted: true, tags: ['#tg', '#zz'], docs: ['a'] });
     });
 
-    it('a tag typed, the color\'s hide: the color hidden, the tag added', () => {
-        const out = pressed('draft tag, hide', 'tagInput()', 'zz', 'hideColor()', 'colorHidden()', '{ tags: tagChips() }');
-        expect(out).toMatchObject({ acted: true, tags: ['#tg', '#zz'] });
+    it('a tag typed, the color\'s menu button: the menu open once, the tag added, and no value chosen in it hides the color', () => {
+        const out = pickedInColor('draft tag, color …', 'tagInput()', 'zz', '{ tags: tagChips() }');
+        expect(out).toMatchObject({ acted: true, menus: 1, tags: ['#tg', '#zz'], hidden: true });
     });
 
     it('a color typed, a tag\'s ×: the tag out, the color put in', () => {
@@ -363,9 +380,9 @@ describe('a button of another part pressed with a field typed in, on a task not 
         expect(out).toMatchObject({ acted: true, tags: [], note1: 'mm', focus: 'value note1' });
     });
 
-    it('a property\'s value typed, the color\'s hide: the color hidden, the value put in', () => {
-        const out = pressed('draft value, hide', 'valueInput(\'note1\')', 'mm', 'hideColor()', 'colorHidden()', '{ note1: valueInput(\'note1\').value }');
-        expect(out).toMatchObject({ acted: true, note1: 'mm', focus: 'value note1' });
+    it('a property\'s value typed, the color\'s menu button: the menu open once, the value put in, and no value chosen in it hides the color', () => {
+        const out = pickedInColor('draft value, color …', 'valueInput(\'note1\')', 'mm', '{ note1: valueInput(\'note1\').value }');
+        expect(out).toMatchObject({ acted: true, menus: 1, note1: 'mm', focus: 'value note1', hidden: true });
     });
 });
 
