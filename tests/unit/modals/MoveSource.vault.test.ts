@@ -101,6 +101,7 @@ async function open(lines: string[] = NOTE, opts: { opening?: boolean } = {}) {
         showDraft: vi.fn(),
         write: vi.fn(() => { if (host.draft()?.canWrite()) host.draft()!.write(); }),
         putTyped: vi.fn(() => typed),
+        saveTyped: vi.fn(),
         notWritten: vi.fn(),
         edited: vi.fn(),
         focusPlace: vi.fn(),

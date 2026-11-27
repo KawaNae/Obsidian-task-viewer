@@ -141,6 +141,7 @@ export class RowHost implements PanelHost, RowPlaceHost {
         this.value = deps.index.getTask(originalId) ?? { ...task, id: originalId };
         this.sourceApply = new SourceApply({
             row: () => this.sourceRow(),
+            saveTyped: () => this.form?.saveTyped(),
             drained: () => this.drained(),
             confirm: (id) => deps.operations.confirmTask(id),
             reread: (id) => deps.index.getTask(id),

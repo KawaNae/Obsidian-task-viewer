@@ -102,6 +102,7 @@ async function open(lines: string[] = NOTE, opts: { opening?: MoveStart; beforeA
         // The form's write, its fields all saved: it asks the host's.
         write: vi.fn(() => { if (host.draft()?.canWrite()) host.draft()!.write(); }),
         putTyped: vi.fn(() => { told.push('typed'); return typed; }),
+        saveTyped: vi.fn(),
         notWritten: vi.fn(),
         edited: vi.fn(),
         focusPlace: vi.fn(() => { told.push('focus'); }),

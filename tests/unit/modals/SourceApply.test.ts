@@ -86,9 +86,12 @@ function setUp(opts: { task?: Task; answers?: WriteAnswer[]; confirm?: boolean; 
     const confirm = vi.fn(async () => opts.confirm ?? true);
     const lockForm = vi.fn();
     const closeHub = vi.fn();
+    const saveTyped = vi.fn();
+    const drained = vi.fn(() => opts.drained ?? Promise.resolve());
     const host: SourceApplyHost = {
         row: () => followed,
-        drained: () => opts.drained ?? Promise.resolve(),
+        saveTyped,
+        drained,
         confirm,
         reread: () => row,
         replace,
@@ -108,6 +111,8 @@ function setUp(opts: { task?: Task; answers?: WriteAnswer[]; confirm?: boolean; 
         confirm,
         lockForm,
         closeHub,
+        saveTyped,
+        drained,
         editor: () => editors[editors.length - 1],
         editors,
         state: () => states[states.length - 1],
@@ -146,6 +151,15 @@ describe('entering the source', () => {
         expect(h.editor().focused).toBe(1);
         // A link typed under the row is written in the row's note.
         expect(h.editor().hooks.linkSource()).toBe(rowOf().file);
+    });
+
+    it('saves what is typed in the fields before it waits for the writes', async () => {
+        const h = setUp();
+        const entering = h.source.enter();
+        expect(h.saveTyped).toHaveBeenCalledTimes(1);
+        expect(h.saveTyped.mock.invocationCallOrder[0]).toBeLessThan(h.drained.mock.invocationCallOrder[0]);
+        await entering;
+        expect(h.state().phase).toBe('source');
     });
 
     it('stays on the card when the index\'s copy is not the row on the disk', async () => {
