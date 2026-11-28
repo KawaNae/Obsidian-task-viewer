@@ -572,7 +572,8 @@ describe.each([
             pressKey(inputs()[0], 'Enter', 13);
             await until(() => state().noteSays, 3000, 'the note is not answered');
             await openHeadings();
-            // From the whole note, two down: Plan, then the Tasks under it.
+            // The empty field's list opens with none selected: three down, the whole note, Plan, then the Tasks under it.
+            pressKey(inputs()[1], 'ArrowDown', 40);
             pressKey(inputs()[1], 'ArrowDown', 40);
             pressKey(inputs()[1], 'ArrowDown', 40);
             await wait(100);

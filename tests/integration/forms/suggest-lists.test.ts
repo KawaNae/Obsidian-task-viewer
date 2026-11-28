@@ -221,7 +221,7 @@ describe('the hub\'s name: an Enter while its [[ list is open', () => {
 });
 
 describe('the hub\'s tag field: Obsidian\'s list, with Obsidian\'s keys', () => {
-    it('opens its list as the field takes the focus, the first item selected; Escape closes the list and leaves the hub open', async () => {
+    it('opens its list as the empty field takes the focus, no item selected; Escape closes the list and leaves the hub open', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const result = run<Record<string, unknown>>(`
             await openHub('次', 'tags');
@@ -229,9 +229,9 @@ describe('the hub\'s tag field: Obsidian\'s list, with Obsidian\'s keys', () => 
             const shown = list();
             escape(tagInput());
             await sleep(200);
-            return JSON.stringify({ first: shown.items[0] === shown.selected, closed: !list(), hub: !!hub(), focused: document.activeElement === tagInput() });
+            return JSON.stringify({ items: shown.items.length > 0, selected: shown.selected, closed: !list(), hub: !!hub(), focused: document.activeElement === tagInput() });
         `);
-        expect(result).toEqual({ first: true, closed: true, hub: true, focused: true });
+        expect(result).toEqual({ items: true, selected: null, closed: true, hub: true, focused: true });
     });
 
     it('puts the selected item in on an Enter while the list is open', async () => {
