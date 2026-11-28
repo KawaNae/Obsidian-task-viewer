@@ -4,17 +4,35 @@ import { composingIn, isFormEnter } from '../modals/form/formEnter';
 /**
  * Obsidian's input suggest, as every list of candidates under a field of
  * ours is shown, so that a field's list and the editor's own behave alike.
- * It behaves as Obsidian's lists do:
- * the first item is selected as the list opens, an Enter puts the selected
- * item in, an Escape closes the list alone; a value that is no item is
- * put in by closing the list (Escape) and pressing Enter.
+ * It behaves as the lists of Obsidian's own fields do (the `[[` of the
+ * editor, a property's text value, the tags): on a field that holds text
+ * the first item is selected as the list opens; on an empty field none is,
+ * and an ArrowDown selects the first. An Enter puts the selected item in,
+ * the one the list opened on, an arrow moved to or the pointer is on; an
+ * Enter with none selected closes the list and is the field's, so
+ * focusing an empty field and pressing Enter puts no item in. An Escape
+ * closes the list alone; a value that is no item is put in by closing
+ * the list (Escape) and pressing Enter.
  *
- * Over Obsidian's, it answers four things:
+ * An empty field is one whose text is empty but for spaces and line
+ * breaks: Obsidian's property value keeps a line break once its text is
+ * deleted, and a field of ours reads its value so too.
+ *
+ * Over Obsidian's, it answers six things:
  *
  * - Whether the list is open ({@link listShown}): an Enter then picks from
  *   the list, and a form the input is in does not take it as its own. Not
  *   `isOpen`, which Obsidian's PopoverSuggest sets as its own (untyped)
  *   field.
+ * - No item is selected as the list opens on an empty field
+ *   ({@link showSuggestions}), as Obsidian's own fields do it.
+ * - The Enter with no item selected goes on to the field. Obsidian's list
+ *   takes every Enter while it is open, one with nothing selected too,
+ *   which it then drops; a first handler, before Obsidian's keys, closes
+ *   the list on that Enter and answers `true`, which stops the lookup
+ *   without preventing the key, so the field's own Enter (`onFormEnter`)
+ *   runs with the list closed. Obsidian's property value takes it as its
+ *   own Enter.
  * - The note's hotkeys are kept out while the list is open. The list's
  *   scope has Obsidian's app scope as its parent, so a key the list does
  *   not take (Mod+B) would fall through to the hotkeys and act on the note
@@ -49,6 +67,39 @@ export abstract class ShownSuggest<T> extends AbstractInputSuggest<T> {
         super(app, listField);
         // After Obsidian's own keys (the arrows, Enter, Escape): the rest.
         this.scope.register(null, null, () => true);
+        // Before them: an Enter with nothing selected. With no key and no
+        // modifiers, an `undefined` lets Obsidian's scope look on.
+        const fieldsEnter = this.scope.register(null, null, (evt: KeyboardEvent) => {
+            if (!isFormEnter(evt, composingIn(this.listField)) || this.selected() !== undefined) return undefined;
+            this.close();
+            return true;
+        });
+        // @ts-ignore - keys is the scope's handlers in the order it looks them up (internal but stable)
+        const keys: unknown[] = this.scope.keys;
+        keys.splice(keys.indexOf(fieldsEnter), 1);
+        keys.unshift(fieldsEnter);
+    }
+
+    /**
+     * Obsidian's, after it put the candidates in the list and opened it:
+     * on an empty field, no item is selected.
+     */
+    showSuggestions(values: T[]): void {
+        // @ts-ignore - showSuggestions is AbstractInputSuggest's (internal but stable)
+        super.showSuggestions(values);
+        if (this.getValue().trim() === '') this.container()?.forceSetSelectedItem(-1, null);
+    }
+
+    /** Obsidian's list of the items, and which is selected (internal but stable). */
+    private container(): { values: T[] | null; selectedItem: number; forceSetSelectedItem(index: number, evt: null): void } | undefined {
+        // @ts-ignore - suggestions is PopoverSuggest's list of the items
+        return this.suggestions;
+    }
+
+    /** The item an Enter puts in, as Obsidian's `useSelectedItem` reads it; none, undefined. */
+    private selected(): T | undefined {
+        const list = this.container();
+        return list?.values?.[list.selectedItem];
     }
 
     /** Whether the list is open. */

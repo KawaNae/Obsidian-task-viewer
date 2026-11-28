@@ -2,9 +2,12 @@
  * The lists of candidates under our fields, in the running Dev
  * vault: every one is Obsidian's input suggest (`ShownSuggest`), which keeps
  * the note's hotkeys out while it is open, takes no Enter an IME commits a
- * conversion with, and behaves as Obsidian's lists do: the first item is
- * selected as it opens, an Enter puts the selected item in, and an Escape
- * closes the list alone. A list stays on its field while the field moves.
+ * conversion with, and behaves as the lists of Obsidian's own fields do:
+ * on a field that holds text the first item is selected as it opens, on an
+ * empty field none is and an ArrowDown selects the first; an Enter puts the
+ * selected item in, an Enter with none selected closes the list and is the
+ * field's, and an Escape closes the list alone. A list stays on its field
+ * while the field moves.
  *
  * The hub is opened on a row as a card opens it, a note beside it active in
  * source mode; fields are typed in as a person types (the text, then its
