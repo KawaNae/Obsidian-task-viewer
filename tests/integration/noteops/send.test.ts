@@ -21,6 +21,7 @@ import * as fs from 'fs';
 import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { closeDialog, onDialog, openDialog as openDialogOn, type DialogState } from '../helpers/send-dialog';
 import { deleteTestFile, readTestFile, vaultAbsolute, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { closeEveryTimer } from '../helpers/timers';
 import { tr } from '../helpers/view-helper';
 import { waitForFileDeindexed } from '../helpers/waits';
 
@@ -211,29 +212,13 @@ function stopTimer(id: string, how: 'suspend' | 'close'): void {
     })()`);
 }
 
-/** Close the timer `id` without recording, if it is open. */
-function closeTimer(id: string): void {
-    obsidianEval(`(async () => {
-        const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        const timer = widget.board.get(${JSON.stringify(id)});
-        if (timer) await widget.lifecycle.close(timer);
-        await new Promise(r => setTimeout(r, 500));
-        return JSON.stringify(true);
-    })()`);
-}
-
 describe('sending a row a timer runs on', () => {
-    let open: string | null = null;
-    afterEach(() => {
-        if (open) closeTimer(open);
-        open = null;
-    });
+    afterEach(closeEveryTimer);
 
     it('its lines all sent: the timer follows them, and ⏸ records in the note they went to', async () => {
         deleteTestFile(`${NEW}.md`);
         await writeIndexedTestFile(SRC, ['- [ ] 計る', '- [ ] 残る', ''].join('\n'));
         const timer = startTimer('計る', 'child');
-        open = timer.id;
         expect(readTestFile(SRC)).toContain(`^${timer.tail}`);
 
         const sent = send('計る', { note: { kind: 'new', path: `${NEW}.md` }, spot: SECTION });
@@ -256,7 +241,6 @@ describe('sending a row a timer runs on', () => {
         deleteTestFile(`${NEW}.md`);
         await writeIndexedTestFile(SRC, ['- [x] 続き', ''].join('\n'));
         const timer = startTimer('続き', 'sibling');
-        open = timer.id;
         const before = readTestFile(SRC);
 
         const sent = send('続き', { note: { kind: 'new', path: `${NEW}.md` }, spot: SECTION });
@@ -275,7 +259,6 @@ describe('sending a row a timer runs on', () => {
         deleteTestFile(RENAMED);
         await writeIndexedTestFile(SRC, ['- [ ] 名前が変わる', ''].join('\n'));
         const timer = startTimer('名前が変わる', 'child');
-        open = timer.id;
         expect(timerFileShown(timer.id, SRC.replace(/\.md$/, ''))).toBe(SRC.replace(/\.md$/, ''));
 
         obsidianEval(`(async () => {
@@ -285,8 +268,7 @@ describe('sending a row a timer runs on', () => {
 
         expect(timerFile(timer.id)).toBe(RENAMED);
         expect(timerFileShown(timer.id, RENAMED.replace(/\.md$/, ''))).toBe(RENAMED.replace(/\.md$/, ''));
-        closeTimer(timer.id);
-        open = null;
+        closeEveryTimer();
         deleteTestFile(RENAMED);
     });
 });

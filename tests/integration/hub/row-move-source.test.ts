@@ -18,6 +18,7 @@ import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
 import { openDialog } from '../helpers/send-dialog';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { closeEveryTimer } from '../helpers/timers';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
@@ -466,21 +467,11 @@ describe('the source opened while the hub moves a row a timer runs on', () => {
         await sleep(300);
         return timer.id;
     `);
-    let timer: string | null = null;
-    afterEach(() => {
-        if (timer === null) return;
-        run(`
-            const widget = plugin.getTimerWidget();
-            const timer = widget.board.get(${JSON.stringify(timer)});
-            if (timer) await widget.lifecycle.close(timer);
-            return 'true';
-        `);
-        timer = null;
-    });
+    afterEach(closeEveryTimer);
 
     it('refuses [Move] on a text that leaves the timer\'s lines out, why above the buttons, and takes the text typed back on the next [Move], which moves it', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
-        timer = startTimer();
+        startTimer();
         const seen = run<Record<string, unknown>>(`
             const timed = await disk();
             await beginMove('動かす行');

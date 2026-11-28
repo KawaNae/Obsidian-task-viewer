@@ -29,6 +29,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { closeEveryTimer } from '../helpers/timers';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-timer-name.md';
@@ -147,17 +148,6 @@ function closeHub(): void {
     `);
 }
 
-/** Close the timer `id` without recording, if it is open. */
-function closeTimer(id: string): void {
-    obsidianEval(`(async () => {
-        const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        const timer = widget.board.get(${JSON.stringify(id)});
-        if (timer) await widget.lifecycle.close(timer);
-        await new Promise(r => setTimeout(r, 500));
-        return JSON.stringify(true);
-    })()`);
-}
-
 beforeAll(() => {
     // Focus moves need the window to have the focus.
     if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']);
@@ -171,20 +161,21 @@ afterAll(async () => {
 });
 
 describe('the name in a timer\'s header', () => {
-    let open: string | null = null;
     afterEach(() => {
-        closeHub();
-        if (open) closeTimer(open);
-        open = null;
+        try {
+            closeHub();
+        } finally {
+            closeEveryTimer();
+        }
     });
 
     it('of a child count-up opens the hub of the running child line, the focus on its name', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 親', ''].join('\n'));
-        open = startTimer({ name: '親' });
-        const line = runningLine(open);
+        const id = startTimer({ name: '親' });
+        const line = runningLine(id);
 
         const seen = run<Record<string, unknown>>(`
-            const id = ${JSON.stringify(open)};
+            const id = ${JSON.stringify(id)};
             const asked = await counting(() => mouse(middle(nameEl(id)), [[0, 0]]));
             await until(() => hub() && nameInput());
             // The first focus comes to the field once the hub's open animation has ended.
@@ -208,13 +199,13 @@ describe('the name in a timer\'s header', () => {
     });
 
     it('of a daily note\'s line with no name shows the date faint; Enter opens its hub, and the name given there is the note\'s and the widget\'s', async () => {
-        open = startTimer({ daily: DAY });
-        const line = runningLine(open);
+        const id = startTimer({ daily: DAY });
+        const line = runningLine(id);
         expect(line.file).toBe(DAILY);
         expect(line.content).toBe('');
 
         const seen = run<Record<string, unknown>>(`
-            const id = ${JSON.stringify(open)};
+            const id = ${JSON.stringify(id)};
             const out = { before: looks(id) };
             const asked = await counting(async () => {
                 nameEl(id).focus();
@@ -242,12 +233,12 @@ describe('the name in a timer\'s header', () => {
     it('draws a link in the line\'s name, and a press on the link opens the hub, not the note', async () => {
         writeTestFile(TARGET, 'target\n');
         await writeIndexedTestFile(FILE, ['- [ ] 読む', ''].join('\n'));
-        open = startTimer({ name: '読む' });
-        const line = runningLine(open);
+        const id = startTimer({ name: '読む' });
+        const line = runningLine(id);
         const target = TARGET.replace(/\.md$/, '');
 
         const seen = run<Record<string, unknown>>(`
-            const id = ${JSON.stringify(open)};
+            const id = ${JSON.stringify(id)};
             await plugin.getOperations().updateTask(${JSON.stringify(line.id)}, { content: ${JSON.stringify(`読む [[${target}]]`)} });
             await until(() => looks(id)?.links.length === 1, 3000, () => JSON.stringify(looks(id)));
             const out = { looks: looks(id) };
@@ -284,10 +275,10 @@ describe('the name in a timer\'s header', () => {
 
     it('turns plain text when the running line is deleted from the note, and a press opens nothing', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 消す', ''].join('\n'));
-        open = startTimer({ name: '消す' });
+        const id = startTimer({ name: '消す' });
 
         const seen = run<Record<string, unknown>>(`
-            const id = ${JSON.stringify(open)};
+            const id = ${JSON.stringify(id)};
             const file = app.vault.getAbstractFileByPath(FILE);
             await app.vault.process(file, text => text.split('\\n').filter((l, i) => i !== 1).join('\\n'));
             await until(() => looks(id) && !looks(id).openable, 3000, () => JSON.stringify(looks(id)));
@@ -311,10 +302,10 @@ describe('the name in a timer\'s header', () => {
 
     it('drags the widget on a press that moves, and opens no hub', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 動かす', ''].join('\n'));
-        open = startTimer({ name: '動かす' });
+        const id = startTimer({ name: '動かす' });
 
         const seen = run<Record<string, unknown>>(`
-            const id = ${JSON.stringify(open)};
+            const id = ${JSON.stringify(id)};
             const box = nameEl(id).closest('.timer-widget');
             let captured = false;
             const onCapture = () => { captured = true; };

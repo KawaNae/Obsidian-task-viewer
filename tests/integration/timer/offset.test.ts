@@ -32,6 +32,7 @@
 import { describe, it, expect, afterAll, afterEach } from 'vitest';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { closeEveryTimer } from '../helpers/timers';
 import { tr } from '../helpers/view-helper';
 import { waitForFileDeindexed } from '../helpers/waits';
 
@@ -178,17 +179,6 @@ function press(id: string, how: 'suspend' | 'resume' | 'close'): void {
     })()`);
 }
 
-/** Close the timer `id` without recording, if it is open. */
-function closeTimer(id: string): void {
-    obsidianEval(`(async () => {
-        const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        const timer = widget.board.get(${JSON.stringify(id)});
-        if (timer) await widget.lifecycle.close(timer);
-        await new Promise(r => setTimeout(r, 500));
-        return JSON.stringify(true);
-    })()`);
-}
-
 function line(name: string): string {
     const found = readTestFile(FILE).split('\n').find(l => l.includes(name));
     if (!found) throw new Error(`no line ${name} in ${FILE}`);
@@ -201,11 +191,9 @@ afterAll(async () => {
 });
 
 describe('shifting the start of a running count-up', () => {
-    let open: string | null = null;
     let startHour: number | null = null;
     afterEach(() => {
-        if (open) closeTimer(open);
-        open = null;
+        closeEveryTimer();
         if (startHour !== null) restoreStartHour(startHour);
         startHour = null;
     });
@@ -214,19 +202,18 @@ describe('shifting the start of a running count-up', () => {
         startHour = startHourAwayFromNow();
         const prior = minuteFloor(Date.now() - 20 * 60_000);
         await writeIndexedTestFile(FILE, [`- [ ] 自分 @${dateOf(prior)}T${timeOf(prior)}`, ''].join('\n'));
-        open = startTimer('自分', 'self');
+        const id = startTimer('自分', 'self');
         // The self start overwrote the line's start with now.
         expect(line('自分')).not.toContain(`T${timeOf(prior)}`);
 
-        const titles = pressElapsed(open, timeOf(prior));
+        const titles = pressElapsed(id, timeOf(prior));
 
         expect(titles.filter(title => title.includes(timeOf(prior)))).toHaveLength(1);
         expect(line('自分')).toMatch(new RegExp(`@${dateOf(prior)}T${timeOf(prior)}(\\s|$)`));
 
         const before = Date.now();
-        press(open, 'close');
+        press(id, 'close');
         const after = Date.now();
-        open = null;
         const record = line('自分');
         const m = /@(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})>(?:\d{4}-\d{2}-\d{2}T)?(\d{2}:\d{2})/.exec(record);
         expect(m, record).not.toBeNull();
@@ -236,19 +223,19 @@ describe('shifting the start of a running count-up', () => {
 
     it('child, shifted 30 minutes back: the running line\'s start rewritten at once, and ⏸ records from it', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 親', ''].join('\n'));
-        open = startTimer('親', 'child');
+        const id = startTimer('親', 'child');
         const running = readTestFile(FILE).split('\n')[1];
         expect(running).toMatch(/^\s+- \[ \] .*@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
 
         const now = minuteFloor(Date.now());
-        const titles = pressElapsed(open, '30', now);
+        const titles = pressElapsed(id, '30', now);
 
         // A child's running line has no start of its own to remember.
         expect(titles.filter(title => /\d{2}:\d{2}/.test(title))).toEqual([]);
         const expected = `@${dateOf(now - 30 * 60_000)}T${timeOf(now - 30 * 60_000)}`;
         expect(readTestFile(FILE).split('\n')[1]).toContain(expected);
 
-        press(open, 'suspend');
+        press(id, 'suspend');
         const record = readTestFile(FILE).split('\n')[1];
         const m = /@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})>(?:\d{4}-\d{2}-\d{2}T)?\d{2}:\d{2}/.exec(record);
         expect(m, record).not.toBeNull();
@@ -259,13 +246,13 @@ describe('shifting the start of a running count-up', () => {
         startHour = startHourAwayFromNow();
         const prior = minuteFloor(Date.now() - 20 * 60_000);
         await writeIndexedTestFile(FILE, [`- [ ] 続ける @${dateOf(prior)}T${timeOf(prior)}`, ''].join('\n'));
-        open = startTimer('続ける', 'self');
-        expect(pressElapsed(open).some(title => title.includes(timeOf(prior)))).toBe(true);
+        const id = startTimer('続ける', 'self');
+        expect(pressElapsed(id).some(title => title.includes(timeOf(prior)))).toBe(true);
 
-        press(open, 'suspend');
-        press(open, 'resume');
+        press(id, 'suspend');
+        press(id, 'resume');
 
-        const titles = pressElapsed(open);
+        const titles = pressElapsed(id);
         expect(titles.some(title => title.includes(timeOf(prior)))).toBe(false);
         expect(titles.filter(title => /\b(5|10|15|30)\b/.test(title))).toHaveLength(4);
     });
@@ -273,19 +260,19 @@ describe('shifting the start of a running count-up', () => {
     it('self, on a line planned months before: the start it overwrote is not offered, not being within today', async () => {
         const prior = minuteFloor(Date.now() - 90 * 24 * 60 * 60_000);
         await writeIndexedTestFile(FILE, [`- [ ] 昔の予定 @${dateOf(prior)}T${timeOf(prior)}`, ''].join('\n'));
-        open = startTimer('昔の予定', 'self');
+        const id = startTimer('昔の予定', 'self');
 
-        const titles = pressElapsed(open);
+        const titles = pressElapsed(id);
         expect(titles.filter(title => /\d{2}:\d{2}/.test(title))).toEqual([]);
         expect(titles.filter(title => /\b(5|10|15|30)\b/.test(title))).toHaveLength(4);
     });
 
     it('"Set the shift...": an amount unreadable is said under the field and not taken; a readable one is foreseen and shifts', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 量で', ''].join('\n'));
-        open = startTimer('量で', 'child');
-        pressElapsed(open, '...');
+        const id = startTimer('量で', 'child');
+        pressElapsed(id, '...');
         // Opened from the widget, the dialog comes over it, not under it.
-        expect(surfaceOverWidget(open)).toContain('tv-overlay');
+        expect(surfaceOverWidget(id)).toContain('tv-overlay');
 
         const unreadable = offsetDialog({ type: '1.5' });
         expect(unreadable).toMatchObject({ kind: 'minutes', says: 'error', text: tr('issue.shape.int'), invalid: true, applicable: false });
@@ -302,8 +289,8 @@ describe('shifting the start of a running count-up', () => {
 
     it('"Set the shift...": a shift the disk refuses keeps the dialog open with why above its buttons, and no notice', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 拒む', ''].join('\n'));
-        open = startTimer('拒む', 'child');
-        pressElapsed(open, '...');
+        const id = startTimer('拒む', 'child');
+        pressElapsed(id, '...');
         const before = readTestFile(FILE);
         const seen = evalOrThrow<Record<string, unknown>>(`(async () => {
             const dialog = document.querySelector('.tv-timer-offset');
@@ -342,8 +329,8 @@ describe('shifting the start of a running count-up', () => {
 
     it('"Set the shift...": a time later than now is foreseen as the day before, and shifts to it', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 時刻で', ''].join('\n'));
-        open = startTimer('時刻で', 'child');
-        pressElapsed(open, '...');
+        const id = startTimer('時刻で', 'child');
+        pressElapsed(id, '...');
 
         // The dialog reads the field against noon; 13:00 is later than that.
         const noon = todayAt(12, 0);
@@ -357,18 +344,18 @@ describe('shifting the start of a running count-up', () => {
 
     it('a real press of the mouse on the elapsed time opens the menu, and does not move the widget', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 押す', ''].join('\n'));
-        open = startTimer('押す', 'child');
+        const id = startTimer('押す', 'child');
 
-        expect(mouse(open, [[0, 0]])).toEqual({ presented: 1, captured: false, moved: [0, 0] });
+        expect(mouse(id, [[0, 0]])).toEqual({ presented: 1, captured: false, moved: [0, 0] });
     });
 
     it('a real press of the mouse that moves drags the widget, and opens no menu', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 動かす', ''].join('\n'));
-        open = startTimer('動かす', 'child');
+        const id = startTimer('動かす', 'child');
 
-        const seen = mouse(open, [[0, 0], [3, 0], [-20, -10], [-40, -30]]);
+        const seen = mouse(id, [[0, 0], [3, 0], [-20, -10], [-40, -30]]);
         // Dragged back, to leave the widget where it was.
-        mouse(open, [[-40, -30], [-20, -10], [0, 0]], [-40, -30]);
+        mouse(id, [[-40, -30], [-20, -10], [0, 0]], [-40, -30]);
 
         expect(seen).toEqual({ presented: 0, captured: true, moved: [-40, -30] });
     });
