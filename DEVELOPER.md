@@ -1298,12 +1298,14 @@ The build writes into `<vault>/.obsidian/plugins/obsidian-task-viewer`. Vault pa
 The E2E suite runs on macOS only, in a vault of its own (`E2E_PATHS.vault` in `dev-paths.mjs`, `~/Develop/Obsidian/DevE2E`), never in a vault the user works in. Before the first test file, `tests/integration/preflight.ts` rebuilds that vault (`tests/integration/vault/rebuild.ts`):
 
 1. It checks, before Obsidian is touched, that the folder is the E2E vault, that the other authors' plugins in the store are the files the definition names, and that this checkout builds.
-2. It closes the vault's window and waits for its renderer to end, so no page still running writes over what follows.
+2. It removes the timers Task Viewer has open in the vault, then closes the vault's window and waits for its renderer to end, so no page still running writes over what follows. The open timers are kept outside the folder, in Obsidian's `localStorage`, which every vault's window shares, under a key that names the vault; the rebuild asks the plugin for that key, unloads the plugin so it writes the key no more, and removes that key alone. A timer a run left open (a CLI call that timed out after the timer started) would otherwise be restored in every later run.
 3. It deletes everything in the folder but the marker, and writes the definition (`tests/integration/vault/definition.ts`), a build of this checkout's source, and the stored plugins.
 4. It opens the window again by a CLI call and waits for the layout and the plugins.
 5. It sets the window's size (`WINDOW_SIZE` in `rebuild.ts`), takes it out of full screen and maximized, and brings it to the front with the focus.
 
-When a step does not hold, the run stops there and says what puts it right. The definition holds only what differs from what Obsidian and the plugins use by default; a test that needs another setting sets it itself. The window is left open after the run, so the state a failed test left can be looked at; the next run closes and rebuilds it. The vault's registration, the trust of its community plugins and the window's place are kept outside the folder and live across rebuilds.
+When a step does not hold, the run stops there and says what puts it right. The definition holds only what differs from what Obsidian and the plugins use by default; a test that needs another setting sets it itself. The window is left open after the run, so the state a failed test left can be looked at; the next run closes and rebuilds it. The vault's registration, the trust of its community plugins, the window's place and Obsidian's other `localStorage` (the emulation of a phone among it) are kept outside the folder and live across rebuilds.
+
+Within a run, a test that starts a timer closes every timer on the board after it (`closeEveryTimer`, `tests/integration/helpers/timers.ts`), not only the one it was answered, since a call that timed out never tells the test its timer's id.
 
 The folder is emptied only when its marker `.tv-e2e-vault` holds the folder's own absolute path, and never when it is, lies in or holds the Main or Dev vault (`tests/integration/vault/emptying.ts`). Its path is read from `dev-paths.mjs` alone, not from the environment.
 

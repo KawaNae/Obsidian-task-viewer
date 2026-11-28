@@ -11,6 +11,8 @@
  *
  * What lies outside the folder is kept as it is: the vault's registration,
  * the record that its community plugins are trusted, and the window's place.
+ * The one exception is the timers Task Viewer keeps open in `localStorage`,
+ * which are removed before the window closes (`forgetTimers`).
  *
  * Each step needs the one before it; the first that does not hold stops the
  * rebuild and is said with what puts it right. Nothing in Obsidian is
@@ -153,9 +155,43 @@ function alive(pid: number): boolean {
 }
 
 /**
- * 2. The vault's window closed and its renderer ended. A closed window is
- * opened by the call that asks for its renderer, so an open and a closed
- * one are closed the same way.
+ * The timers Task Viewer has open in the vault, forgotten: a run that did
+ * not close one (a CLI call that timed out after the timer started) would
+ * otherwise leave it to every later run, the note it ran on gone and the
+ * timer restored all the same.
+ *
+ * The plugin keeps its open timers in Obsidian's `localStorage`, outside the
+ * folder, under a key of its own that names the vault; every vault's window
+ * shares that storage, so only the key the plugin answers for this vault is
+ * removed. The plugin is unloaded first, which saves what it holds one last
+ * time, so nothing of it writes the key again before the window closes.
+ *
+ * A build that is not loaded, or that answers no key, has its timers left;
+ * the tests that start timers close what is on the board after each test.
+ */
+function forgetTimers(): Problem | null {
+    const answer = obsidianEval(`(async () => {
+        const id = ${JSON.stringify(TASK_VIEWER_ID)};
+        const key = app.plugins.plugins[id]?.getTimerWidget?.()?.persistence?.storageKey?.() ?? null;
+        if (key === null) return JSON.stringify({ key });
+        await app.plugins.disablePlugin(id);
+        localStorage.removeItem(key);
+        return JSON.stringify({ key, left: localStorage.getItem(key) !== null });
+    })()`) as { key?: unknown; left?: unknown };
+    if (errorOf(answer) || !answer || typeof answer !== 'object' || !('key' in answer)) return cliProblem(answer);
+    if (answer.left) {
+        return {
+            what: `the open timers of ${VAULT_NAME} (localStorage \`${String(answer.key)}\`) were written again after they were removed`,
+            fix: `close the timers in ${VAULT_NAME}'s widget by hand`,
+        };
+    }
+    return null;
+}
+
+/**
+ * 2. The vault's timers forgotten, its window closed and its renderer
+ * ended. A closed window is opened by the call that asks for its renderer,
+ * so an open and a closed one are closed the same way.
  */
 async function closeWindow(): Promise<Problem | null> {
     const answer = await evalOnceLoaded('JSON.stringify({ path: app.vault.adapter.basePath, pid: process.pid })', 30000);
@@ -167,6 +203,8 @@ async function closeWindow(): Promise<Problem | null> {
             fix: `give the E2E vault's folder a name no other vault has (\`E2E_PATHS\` in dev-paths.mjs)`,
         };
     }
+    const timers = forgetTimers();
+    if (timers) return timers;
     // Closed a moment later, so the call that asked for it is answered first.
     const closing = obsidianEval(`(setTimeout(() => require('electron').remote.getCurrentWindow().close(), 50), JSON.stringify(true))`);
     if (closing !== true) return cliProblem(closing);
