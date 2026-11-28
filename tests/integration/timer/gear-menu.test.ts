@@ -31,6 +31,7 @@
 import { describe, it, expect, afterAll, afterEach } from 'vitest';
 import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { closeEveryTimer } from '../helpers/timers';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { MENUS } from '../helpers/menus';
@@ -166,17 +167,6 @@ function shown(id: string): { onBoard: boolean; inWidget: boolean } {
     `);
 }
 
-/** Close the timer `id` without recording, if it is open. */
-function closeTimer(id: string): void {
-    obsidianEval(`(async () => {
-        const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        const timer = widget.board.get(${JSON.stringify(id)});
-        if (timer) await widget.lifecycle.close(timer);
-        await new Promise(r => setTimeout(r, 500));
-        return JSON.stringify(true);
-    })()`);
-}
-
 /** The note's non-empty lines on the disk, once `test` holds of them (within `ms`). */
 async function linesOnDisk(test: (lines: string[]) => boolean, what: string, ms = 3000): Promise<string[]> {
     const end = Date.now() + ms;
@@ -206,29 +196,25 @@ afterAll(async () => {
 });
 
 describe('the gear of a started timer', () => {
-    let open: string | null = null;
-    afterEach(() => {
-        if (open) closeTimer(open);
-        open = null;
-    });
+    afterEach(closeEveryTimer);
 
     it('a running count-up: the header is fold and the gear with no ✕, and the menu is the shift section, a separator and Close without recording', async () => {
         await writeIndexedTestFile(FILE, NOTE);
-        open = startTimer('countup');
+        const id = startTimer('countup');
 
         const header = run<{ buttons: string[]; close: boolean }>(`
-            const header = item(${JSON.stringify(open)}).querySelector('.timer-widget__header');
+            const header = item(${JSON.stringify(id)}).querySelector('.timer-widget__header');
             return JSON.stringify({
                 buttons: [...header.querySelectorAll(':scope > button')].map(b =>
                     b.classList.contains('timer-widget__toggle-btn') ? 'fold'
                     : b.classList.contains('timer-widget__settings-btn') ? 'gear'
                     : b.className),
-                close: !!item(${JSON.stringify(open)}).querySelector('.timer-widget__close-btn'),
+                close: !!item(${JSON.stringify(id)}).querySelector('.timer-widget__close-btn'),
             });
         `);
         expect(header).toEqual({ buttons: ['fold', 'gear'], close: false });
 
-        expect(gearMenu(open)).toEqual([
+        expect(gearMenu(id)).toEqual([
             heading(tr('timer.offsetStart')),
             ...[5, 10, 15, 30].map(minutes => choice(`  ${tr('timer.offsetMinutesAgo', { minutes })}`)),
             choice(`  ${tr('timer.offsetCustom')}`),
@@ -239,48 +225,46 @@ describe('the gear of a started timer', () => {
 
     it('Close without recording, while running: the timer is gone, and so is its running child line on the disk', async () => {
         await writeIndexedTestFile(FILE, NOTE);
-        open = startTimer('countup');
+        const id = startTimer('countup');
         await linesOnDisk(lines => lines.length === 2 && RUNNING_LINE.test(lines[1]), 'the running child line');
 
-        chooseFromGear(open, tr('timer.discard'));
+        chooseFromGear(id, tr('timer.discard'));
 
-        expect(shown(open)).toEqual({ onBoard: false, inWidget: false });
+        expect(shown(id)).toEqual({ onBoard: false, inWidget: false });
         const lines = await linesOnDisk(lines => lines.length === 1, 'the running line thrown away');
         expect(lines[0]).toMatch(/^- \[ \] 親/);
-        open = null;
     });
 
     it('waiting to record, once the disk refused the record: the menu is Close without recording alone', async () => {
         await writeIndexedTestFile(FILE, NOTE);
-        open = startTimer('countup');
+        const id = startTimer('countup');
 
-        expect(suspend(open, true)).toBe('pending');
+        expect(suspend(id, true)).toBe('pending');
 
-        expect(gearMenu(open)).toEqual([choice(tr('timer.discard'), true)]);
+        expect(gearMenu(id)).toEqual([choice(tr('timer.discard'), true)]);
     });
 
     it('suspended: the menu is Close (recorded) alone, which closes the timer and leaves the record on the disk', async () => {
         await writeIndexedTestFile(FILE, NOTE);
-        open = startTimer('countup');
-        expect(suspend(open)).toBe('suspended');
+        const id = startTimer('countup');
+        expect(suspend(id)).toBe('suspended');
         const recorded = await linesOnDisk(lines => lines.length === 2 && RECORD_LINE.test(lines[1]), 'the record');
 
-        expect(gearMenu(open)).toEqual([choice(tr('timer.close'))]);
+        expect(gearMenu(id)).toEqual([choice(tr('timer.close'))]);
 
-        chooseFromGear(open, tr('timer.close'));
+        chooseFromGear(id, tr('timer.close'));
 
-        expect(shown(open)).toEqual({ onBoard: false, inWidget: false });
+        expect(shown(id)).toEqual({ onBoard: false, inWidget: false });
         // The record stays as written; only the anchor the timer put on it is taken off.
         const kept = recorded[1].replace(/ \^tv-t-\S+$/, '');
         await linesOnDisk(lines => lines.length === 2 && lines[1] === kept, 'the record kept, its anchor taken off');
-        open = null;
     });
 
     it('a Pomodoro: the menu has the work and break lengths and auto repeat, no shift section, and ends in a separator and the close item', async () => {
         await writeIndexedTestFile(FILE, NOTE);
-        open = startTimer('pomodoro');
+        const id = startTimer('pomodoro');
 
-        const items = gearMenu(open);
+        const items = gearMenu(id);
         const titles = items.map(i => i === 'separator' ? '---' : i.title);
 
         expect(titles).toContain(tr('timer.workDuration'));
@@ -293,36 +277,35 @@ describe('the gear of a started timer', () => {
 
     it('a shift chosen from the gear rewrites the running line\'s start, and so does one chosen from a folded widget', async () => {
         await writeIndexedTestFile(FILE, NOTE);
-        open = startTimer('countup');
+        const id = startTimer('countup');
 
         const now = minuteFloor(Date.now());
-        chooseFromGear(open, `  ${tr('timer.offsetMinutesAgo', { minutes: 5 })}`, now);
+        chooseFromGear(id, `  ${tr('timer.offsetMinutesAgo', { minutes: 5 })}`, now);
         let lines = await linesOnDisk(lines => lines.length === 2 && lines[1].includes(startOf(now - 5 * 60_000)), 'the start 5 minutes back');
         expect(lines[1]).toMatch(RUNNING_LINE);
 
         const folded = run<boolean>(`
-            const id = ${JSON.stringify(open)};
+            const id = ${JSON.stringify(id)};
             item(id).querySelector('.timer-widget__toggle-btn').click();
             await until(() => item(id) && !item(id).querySelector('.timer-widget__content'), 2000);
             return JSON.stringify(!item(id).querySelector('.timer-widget__time-display'));
         `);
         expect(folded).toBe(true);
 
-        chooseFromGear(open, `  ${tr('timer.offsetMinutesAgo', { minutes: 10 })}`, now);
+        chooseFromGear(id, `  ${tr('timer.offsetMinutesAgo', { minutes: 10 })}`, now);
         lines = await linesOnDisk(lines => lines.length === 2 && lines[1].includes(startOf(now - 10 * 60_000)), 'the start 10 minutes back');
         expect(lines[1]).toMatch(RUNNING_LINE);
     });
 
     it('the next-task suggestion, once the last timer is closed, keeps its ✕ and has no gear', async () => {
         await writeIndexedTestFile(FILE, NOTE);
-        open = startTimer('countup');
+        const id = startTimer('countup');
         const others = run<string[]>(`
-            return JSON.stringify(widget.board.values().map(t => t.id).filter(id => id !== ${JSON.stringify(open)}));
+            return JSON.stringify(widget.board.values().map(t => t.id).filter(id => id !== ${JSON.stringify(id)}));
         `);
         expect(others, 'no other timer is open, for the suggestion to come').toEqual([]);
 
-        chooseFromGear(open, tr('timer.discard'));
-        open = null;
+        chooseFromGear(id, tr('timer.discard'));
 
         const idle = run<{ close: boolean; gear: boolean }>(`
             await until(() => document.querySelector('.timer-widget [data-idle="true"]'), 2000);

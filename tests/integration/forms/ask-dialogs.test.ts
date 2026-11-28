@@ -28,6 +28,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { closeEveryTimer } from '../helpers/timers';
 import { closeViews, openView, readSettings, saveSettings, tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { MENUS } from '../helpers/menus';
@@ -230,6 +231,7 @@ describe('a flow\'s three ways to delete', () => {
 
 describe('a timer\'s three ways to start on a completed task', () => {
     const NOTE = ['# 見出し', '- [x] 済み @2026-10-04', ''].join('\n');
+    afterEach(closeEveryTimer);
 
     /**
      * Start a count-up on the completed row in self, as the menu does, answer
