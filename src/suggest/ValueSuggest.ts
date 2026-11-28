@@ -19,14 +19,17 @@ export interface ValueSuggestOptions {
  * The list of values under a text field of ours: the hub's tags, style and
  * properties, the filter's keys, values and pills, the top-right fields of
  * a list. One kind of list for every field, Obsidian's (`ShownSuggest`), as
- * the name's links and tags are: the first item is selected as it
- * opens, an Enter puts it in, and a value that is no item is put in by
- * closing the list (Escape) and pressing Enter, as the editor's lists do.
+ * the name's links and tags are: on a field that holds text the first item
+ * is selected as it opens, an Enter puts the selected item in, and a value
+ * that is no item is put in by closing the list (Escape) and pressing
+ * Enter, as the editor's lists do. On an empty field none is selected, and
+ * an Enter is the field's, as it is with the list closed.
  *
  * The field's own Enter (`onFormEnter`, `bindField`) never sees an Enter
- * the list takes: Obsidian's keymap takes it before the field does. What
- * is picked is committed by {@link ValueSuggestOptions.pick}, not by the
- * order the field's listeners were put on.
+ * the list takes: Obsidian's keymap takes it before the field does. An
+ * Enter with no item selected closes the list first and reaches the field
+ * then. What is picked is committed by {@link ValueSuggestOptions.pick},
+ * not by the order the field's listeners were put on.
  */
 export class ValueSuggest extends ShownSuggest<string> {
     constructor(app: App, input: HTMLInputElement, private readonly opts: ValueSuggestOptions) {

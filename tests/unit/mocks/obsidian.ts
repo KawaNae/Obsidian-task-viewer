@@ -68,6 +68,22 @@ export class Scope {
         return handler;
     }
     unregister(): void {}
+    /**
+     * Obsidian's lookup: the handlers in order, a handler matching on no
+     * key and no modifiers looked past when it answers `undefined`, then
+     * the parent's. Modifiers match as Obsidian's compiled ones do: none
+     * held is `[]`.
+     */
+    handleKey(evt: { key: string }, ctx: { modifiers: string } = { modifiers: '' }): unknown {
+        for (const handler of this.keys) {
+            const modifiers = handler.modifiers === null ? null : (handler.modifiers as string[]).join(',');
+            if (modifiers !== null && modifiers !== ctx.modifiers) continue;
+            if (handler.key !== null && handler.key.toLowerCase() !== evt.key.toLowerCase()) continue;
+            const answer = handler.func(evt, ctx);
+            if (answer !== undefined || handler.key !== null || handler.modifiers !== null) return answer;
+        }
+        return this.parent?.handleKey(evt, ctx);
+    }
 }
 
 export class Modal {
@@ -156,6 +172,48 @@ export class PopoverSuggest {
     }
 }
 
+/**
+ * Obsidian 1.15's list of a suggest's items (`suggestions`), with what of
+ * it a field's list reads: the items, the one selected, the arrows and the
+ * Enter it puts in the suggest's scope. Setting the items selects the
+ * first; an Enter skips only an Enter with `isComposing`, and puts in the
+ * item selected, if there is one.
+ */
+export class SuggestionList<T> {
+    values: T[] | null = [];
+    selectedItem = 0;
+    constructor(private readonly chooser: { selectSuggestion(value: T, evt: unknown): void }, scope: Scope) {
+        scope.register([], 'ArrowUp', (evt) => this.move(-1, evt));
+        scope.register([], 'ArrowDown', (evt) => this.move(1, evt));
+        scope.register([], 'Enter', (evt) => {
+            if ((evt as KeyboardEvent).isComposing) return undefined;
+            this.useSelectedItem(evt);
+            return false;
+        });
+    }
+    private move(by: number, evt: unknown): false | undefined {
+        if ((evt as KeyboardEvent).isComposing) return undefined;
+        this.setSelectedItem(this.selectedItem + by, evt);
+        return false;
+    }
+    setSuggestions(values: T[]): void {
+        this.values = values;
+        this.setSelectedItem(0, null);
+    }
+    setSelectedItem(index: number, evt: unknown): void {
+        const count = this.values?.length ?? 0;
+        if (count === 0) return;
+        this.forceSetSelectedItem(index < 0 ? count - 1 : index >= count ? 0 : index, evt);
+    }
+    forceSetSelectedItem(index: number, _evt: unknown): void { this.selectedItem = index; }
+    useSelectedItem(evt: unknown): boolean {
+        const value = this.values?.[this.selectedItem];
+        if (value === undefined) return false;
+        this.chooser.selectSuggestion(value, evt);
+        return true;
+    }
+}
+
 export class AbstractInputSuggest extends PopoverSuggest {
     inputEl: any;
     limit = 100;
@@ -164,11 +222,18 @@ export class AbstractInputSuggest extends PopoverSuggest {
         this.inputEl = inputEl;
         // Obsidian's: a scope whose parent is the app's, holding the list's keys.
         this.scope = new Scope((app as { scope?: Scope } | undefined)?.scope);
+        this.suggestions = new SuggestionList(this as never, this.scope as Scope);
         (this.scope as Scope).register([], 'Escape', () => false);
-        (this.scope as Scope).register([], 'Enter', () => false);
     }
     setValue(value: string): void { this.inputEl.value = value; }
     getValue(): string { return this.inputEl.value; }
+    /** Obsidian's: no item closes the list; else the items set, the first selected, and the list opened. */
+    showSuggestions(values: unknown[]): void {
+        if (values.length === 0) { this.close(); return; }
+        this.suggestions.setSuggestions(values);
+        this.open();
+    }
+    selectSuggestion(_value: unknown, _evt: unknown): void {}
     /** The field's places the list was put by, in order. */
     placements: unknown[] = [];
     /**

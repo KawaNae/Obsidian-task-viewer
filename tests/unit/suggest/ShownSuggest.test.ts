@@ -1,11 +1,13 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { ShownSuggest } from '../../../src/suggest/ShownSuggest';
+import { onFormEnter } from '../../../src/modals/form/formEnter';
 
 /**
  * `ShownSuggest` over Obsidian's input suggest (the mock's, which holds the
  * list's keys in its scope as Obsidian's does, and puts the list by the
  * field's place on every open): every key the list does not take stops at
- * its scope, an Enter an IME commits a conversion with picks nothing, and
+ * its scope, an empty field opens the list with nothing selected and its
+ * Enter is the field's, an Enter an IME commits a conversion with picks nothing, and
  * the list is placed again on the frame after the field moved, or the room
  * Obsidian keeps it in changed.
  */
@@ -92,8 +94,17 @@ describe('ShownSuggest', () => {
         expect(last.key).toBeNull();
         // true: the lookup stops here; not false, which would prevent the key's default.
         expect(last.func()).toBe(true);
-        // Obsidian's own keys come first.
-        expect(keys.slice(0, -1).map(k => k.key)).toEqual(['Escape', 'Enter']);
+        // Obsidian's own keys come between the first and the last.
+        expect(keys.slice(1, -1).map(k => k.key)).toEqual(['ArrowUp', 'ArrowDown', 'Enter', 'Escape']);
+    });
+
+    it('looks first at an Enter with nothing selected, a handler on no key and no modifiers, so Obsidian\'s keys are looked up after it', () => {
+        const suggest = new Picks({ scope: {} } as never, field());
+        const keys = (suggest.scope as unknown as { keys: { modifiers: unknown; key: string | null; func: (evt: unknown) => unknown }[] }).keys;
+        expect(keys[0].modifiers).toBeNull();
+        expect(keys[0].key).toBeNull();
+        // undefined on any other key: the lookup goes on to Obsidian's.
+        expect(keys[0].func(key({ key: 'ArrowDown', keyCode: 40 }))).toBeUndefined();
     });
 
     it.each([
@@ -110,6 +121,103 @@ describe('ShownSuggest', () => {
         suggest.selectSuggestion('a', key({}));
         suggest.selectSuggestion('b', { type: 'click' } as MouseEvent);
         expect(suggest.picked).toEqual(['a', 'b']);
+    });
+
+    describe('on an empty field, no item is selected as the list opens, and an Enter with none selected is the field\'s', () => {
+        /** A list of two items over a field the test types in, open as Obsidian opens it on what the field holds. */
+        function typed(text: string) {
+            const win = frames();
+            const at = placedField(win);
+            const listeners: Record<string, ((evt: unknown) => void)[]> = {};
+            const input = at.input as unknown as { value: string; addEventListener: unknown };
+            input.addEventListener = (type: string, fn: (evt: unknown) => void) => { (listeners[type] ??= []).push(fn); };
+            const suggest = new Picks(openApp, at.input);
+            const runs: string[] = [];
+            onFormEnter(at.input, () => runs.push(input.value));
+            /** What the field holds now, the list opened again on it, as typing does. */
+            const type = (value: string) => { input.value = value; suggest.showSuggestions(['a', 'b']); };
+            /**
+             * A keydown as Obsidian's keymap takes it while the list is open
+             * (its scope first, in the capture phase), then on to the field
+             * unless the scope answered `false`.
+             */
+            const press = (init: Partial<KeyboardEvent> = {}) => {
+                const evt = key({ preventDefault: () => {}, ...init });
+                const answer = suggest.listShown ? (suggest.scope as unknown as { handleKey(e: unknown): unknown }).handleKey(evt) : undefined;
+                if (answer !== false) (listeners['keydown'] ?? []).forEach(fn => fn(evt));
+                return answer;
+            };
+            const selected = () => (suggest as unknown as { suggestions: { selectedItem: number } }).suggestions.selectedItem;
+            type(text);
+            return { suggest, type, press, selected, runs };
+        }
+
+        it('opens with no item selected', () => {
+            const { suggest, selected } = typed('');
+            expect(suggest.listShown).toBe(true);
+            expect(selected()).toBe(-1);
+        });
+
+        it('closes the list on an Enter, puts nothing in, and the Enter goes on to the field, not prevented', () => {
+            const { suggest, press, runs } = typed('');
+            // true: the lookup stops, and the keymap prevents nothing.
+            expect(press()).toBe(true);
+            expect(suggest.listShown).toBe(false);
+            expect(suggest.picked).toEqual([]);
+            expect(runs).toEqual(['']);
+        });
+
+        it('puts the first item in on an Enter after an ArrowDown, and the field takes no Enter', () => {
+            const { suggest, press, selected, runs } = typed('');
+            press({ key: 'ArrowDown', keyCode: 40 });
+            expect(selected()).toBe(0);
+            expect(press()).toBe(false);
+            expect(suggest.picked).toEqual(['a']);
+            expect(runs).toEqual([]);
+        });
+
+        it('puts the first item in on an Enter in a field that holds text', () => {
+            const { suggest, press, selected, runs } = typed('a');
+            expect(selected()).toBe(0);
+            expect(press()).toBe(false);
+            expect(suggest.picked).toEqual(['a']);
+            expect(runs).toEqual([]);
+        });
+
+        it('selects none again once what was typed is deleted, and the Enter is the field\'s', () => {
+            const { suggest, type, press, selected, runs } = typed('');
+            type('x');
+            expect(selected()).toBe(0);
+            type('');
+            expect(selected()).toBe(-1);
+            expect(press()).toBe(true);
+            expect(suggest.picked).toEqual([]);
+            expect(runs).toEqual(['']);
+        });
+
+        it.each([
+            ['spaces', '   '],
+            ['a line break, as Obsidian\'s property value keeps once its text is deleted', '\n'],
+        ])('reads a field of %s alone as empty', (_name, text) => {
+            const { press, selected, runs } = typed(text);
+            expect(selected()).toBe(-1);
+            expect(press()).toBe(true);
+            expect(runs).toEqual([text]);
+        });
+
+        it.each([
+            ['Safari and WebKit: after the composition, keyCode 229', { keyCode: 229 }],
+            ['Chromium on macOS: isComposing', { isComposing: true, keyCode: 229 }],
+        ])('on an Enter an IME commits with (%s), puts nothing in, keeps the list open, and the field does not act', (_name, init) => {
+            for (const text of ['', 'a']) {
+                const { suggest, press, runs } = typed(text);
+                press(init);
+                expect(suggest.picked).toEqual([]);
+                expect(suggest.listShown).toBe(true);
+                expect(runs).toEqual([]);
+                suggest.close();
+            }
+        });
     });
 
     describe('the list stays on its field while the field, or the room the list is kept in, changes', () => {
