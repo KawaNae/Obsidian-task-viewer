@@ -204,7 +204,7 @@ describe('the hub\'s form', () => {
         `);
         expect(shown).toEqual({
             before: { inherited: false, border: 'solid' },
-            menu: [tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.clearToInherited')],
+            menu: [tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: '2026-12-01' }), tr('modal.hub.inheritedOverridden'), tr('modal.hub.openInheritedLine'), tr('modal.hub.clearToInherited')],
             date: '', faint: '2026-12-01', frame: { inherited: true, border: 'dashed' },
             time: '10:00', timeFrame: { inherited: false, border: 'solid' },
             says: [],

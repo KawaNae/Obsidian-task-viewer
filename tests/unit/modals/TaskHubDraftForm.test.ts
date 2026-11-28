@@ -291,6 +291,7 @@ describe('the dates of a hub on a task not written yet', () => {
         s.press(startDate.parent!.find('tv-form__menu-button')!);
         expect(s.menus.at(-1)!.map(item => [item.title, item.disabled])).toEqual([
             [t('modal.hub.fromSection'), true],
+            [t('modal.hub.inheritedValue', { value: '2031-01-10' }), true],
             [t('modal.hub.openInheritedLine'), true],
             [t('modal.hub.writeInherited'), false],
         ]);

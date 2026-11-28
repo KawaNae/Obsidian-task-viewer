@@ -1,7 +1,7 @@
 import { t } from '../../../i18n';
 import type { CascadeSourceKind } from '../CascadeSource';
 import type { FieldMenuHead, FieldMenuItem } from '../../form/FieldMenuButton';
-import type { DropName, FieldAction } from './FieldState';
+import type { DropName, FieldAction, FieldMenuHeadModel } from './FieldState';
 
 /**
  * How a field's menu (`FieldStates.menu`) is drawn: the title and the icon
@@ -9,10 +9,22 @@ import type { DropName, FieldAction } from './FieldState';
  * each, so that a name is changed here alone.
  */
 export const FieldMenus = {
-    /** The greyed line at the head of the menu: where the inherited value is written. */
-    head(source: CascadeSourceKind): FieldMenuHead {
-        const [title, icon] = SOURCE_LINES[source];
-        return { title: t(title), icon };
+    /**
+     * The greyed lines at the head of the menu (`FieldStates.menu`): where
+     * the inherited value is written, the value (cut to one line), and,
+     * where the field's own line overrides it, that it does. None where
+     * nothing is inherited.
+     */
+    heads(head: FieldMenuHeadModel | null): FieldMenuHead[] {
+        if (head === null) return [];
+        const [title, icon] = SOURCE_LINES[head.source];
+        const value = head.inherited.kind === 'value' ? cut(head.inherited.text) : t('modal.hub.noValue');
+        const lines: FieldMenuHead[] = [
+            { title: t(title), icon },
+            { title: t('modal.hub.inheritedValue', { value }), icon: 'corner-down-right' },
+        ];
+        if (head.overridden) lines.push({ title: t('modal.hub.inheritedOverridden'), icon: 'pencil' });
+        return lines;
     },
 
     /** An item, which runs `run`: greyed, taking no press, for a line the hub has none of to open. */
@@ -22,6 +34,14 @@ export const FieldMenus = {
         return { title: t(title), icon, run: disabled ? null : run, keepsTyped: action.action === 'openSource' };
     },
 };
+
+/** How many characters of an inherited value the menu's line shows: past it, the value is cut and ends in "…". */
+export const HEAD_VALUE_LENGTH = 24;
+
+function cut(text: string): string {
+    const chars = [...text];
+    return chars.length > HEAD_VALUE_LENGTH ? `${chars.slice(0, HEAD_VALUE_LENGTH).join('')}…` : text;
+}
 
 const SOURCE_LINES: Record<CascadeSourceKind, readonly [title: string, icon: string]> = {
     section: ['modal.hub.fromSection', 'heading'],

@@ -105,7 +105,7 @@ describe('the color\'s field and its menu, as its own line and its section say',
         expect(colorInput(h).placeholder).toBe('blue');
         expect(box(h).classes.has('tv-form__control--inherited')).toBe(true);
         expect(swatch(h)).toBe('blue');
-        expect(titles(h)).toEqual(['Inherited from section', 'Open inherited line', 'Write inherited value to this task', 'Set to no value']);
+        expect(titles(h)).toEqual(['Inherited from section', 'Inherited value: blue', 'Open inherited line', 'Write inherited value to this task', 'Set to no value']);
         await pick(h, 'Write inherited value to this task');
         expect(h.lines()).toEqual(['# Tasks', '- tv-color:: blue', '- [ ] Row', '\t- tv-color:: blue', '# Done', '']);
         expect(colorInput(h).value).toBe('blue');
@@ -120,7 +120,7 @@ describe('the color\'s field and its menu, as its own line and its section say',
         expect(colorInput(h).placeholder).toBe('blue');
         expect(box(h).classes.has('tv-form__control--inherited')).toBe(false);
         expect(swatch(h)).toBe('transparent');
-        expect(titles(h)).toEqual(['Inherited from section', 'Open inherited line', 'Follow inherited value']);
+        expect(titles(h)).toEqual(['Inherited from section', 'Inherited value: blue', 'The inherited value is overridden', 'Open inherited line', 'Follow inherited value']);
         await pick(h, 'Follow inherited value');
         expect(h.lines()).toEqual(['# Tasks', '- tv-color:: blue', '- [ ] Row', '# Done', '']);
         expect(struck(h)).toBeNull();
@@ -132,7 +132,7 @@ describe('the color\'s field and its menu, as its own line and its section say',
         expect(box(h).classes.has('tv-form__control--inherited')).toBe(false);
         // What emptying the field shows.
         expect(colorInput(h).placeholder).toBe('blue');
-        expect(titles(h)).toEqual(['Inherited from section', 'Open inherited line', 'Set to no value', 'Clear and follow inherited value']);
+        expect(titles(h)).toEqual(['Inherited from section', 'Inherited value: blue', 'The inherited value is overridden', 'Open inherited line', 'Set to no value', 'Clear and follow inherited value']);
         await pick(h, 'Clear and follow inherited value');
         expect(h.lines()).toEqual(['# Tasks', '- tv-color:: blue', '- [ ] Row', '# Done', '']);
         expect(colorInput(h).value).toBe('');
@@ -159,7 +159,7 @@ describe('the color\'s field and its menu, as its own line and its section say',
         const h = await open(['---', 'tv-color: red', '---', '# Tasks', '- tv-color::', '- [ ] Row', '# Done', '']);
         expect(colorInput(h).placeholder).toBe('No value');
         expect(box(h).classes.has('tv-form__control--inherited')).toBe(true);
-        expect(titles(h)).toEqual(['Inherited from section', 'Open inherited line']);
+        expect(titles(h)).toEqual(['Inherited from section', 'Inherited value: No value', 'Open inherited line']);
     });
 });
 
@@ -191,7 +191,7 @@ describe('the date fields and their menus, as the row\'s line and its section sa
     it('shows the section\'s start date faint in a dashed field, and writes it to the row from its menu', async () => {
         const h = await open(['# Tasks', '- tv-start:: 2026-12-01', '- [ ] Row', '# Done', '']);
         expect([input(h, 'startDate').placeholder, dashed(h, 'startDate')]).toEqual(['2026-12-01', true]);
-        expect(menu(h, 'startDate').map(item => item.title)).toEqual(['Inherited from section', 'Open inherited line', 'Write inherited value to this task']);
+        expect(menu(h, 'startDate').map(item => item.title)).toEqual(['Inherited from section', 'Inherited value: 2026-12-01', 'Open inherited line', 'Write inherited value to this task']);
         await pick(h, 'startDate', 'Write inherited value to this task');
         expect(h.lines()[2]).toBe('- [ ] Row @2026-12-01');
         expect([input(h, 'startDate').value, dashed(h, 'startDate')]).toEqual(['2026-12-01', false]);
@@ -209,7 +209,7 @@ describe('the date fields and their menus, as the row\'s line and its section sa
 
     it('clears the row\'s own start date to follow the section\'s, its time kept', async () => {
         const h = await open(['# Tasks', '- tv-start:: 2026-12-01', '- [ ] Row @2026-11-26T10:00', '# Done', '']);
-        expect(menu(h, 'startDate').map(item => item.title)).toEqual(['Inherited from section', 'Open inherited line', 'Clear and follow inherited value']);
+        expect(menu(h, 'startDate').map(item => item.title)).toEqual(['Inherited from section', 'Inherited value: 2026-12-01', 'The inherited value is overridden', 'Open inherited line', 'Clear and follow inherited value']);
         await pick(h, 'startDate', 'Clear and follow inherited value');
         expect(h.lines()[2]).toBe('- [ ] Row @10:00');
         expect([input(h, 'startDate').value, input(h, 'startDate').placeholder, dashed(h, 'startDate')]).toEqual(['', '2026-12-01', true]);
@@ -218,6 +218,10 @@ describe('the date fields and their menus, as the row\'s line and its section sa
     it('writes the whole inherited due from the due\'s time field', async () => {
         const h = await open(['# Tasks', '- tv-due:: 2026-12-05 18:00', '- [ ] Row', '# Done', '']);
         expect([input(h, 'dueDate').placeholder, input(h, 'dueTime').placeholder, dashed(h, 'dueTime')]).toEqual(['2026-12-05', '18:00', true]);
+        // Both fields stand for the one due: each menu says the whole of it.
+        for (const key of ['dueDate', 'dueTime'] as const) {
+            expect(menu(h, key).map(item => item.title).slice(0, 2)).toEqual(['Inherited from section', 'Inherited value: 2026-12-05 18:00']);
+        }
         await pick(h, 'dueTime', 'Write inherited value to this task');
         expect(h.host.task().due).toBe('2026-12-05T18:00');
         expect([input(h, 'dueDate').value, input(h, 'dueTime').value]).toEqual(['2026-12-05', '18:00']);
@@ -292,6 +296,7 @@ describe('the date fields and their menus, as the row\'s line and its section sa
         await h.begin();
         expect(menu(h, 'startDate').map(item => [item.title, item.disabled])).toEqual([
             ['Inherited from section', true],
+            ['Inherited value: 2026-12-01', true],
             ['Open inherited line', true],
             ['Write inherited value to this task', false],
         ]);
@@ -332,7 +337,7 @@ describe('the date fields and their menus, as the row\'s line and its section sa
             const h = await held(['# Tasks', '- tv-due:: 2026-12-05', '- [ ] Row', '# Done', '']);
             typeIn(h, 'dueTime', '99:99');
             const items = press(h, 'dueDate');
-            expect(items?.map(item => item.title)).toEqual(['Inherited from section', 'Open inherited line', 'Write inherited value to this task']);
+            expect(items?.map(item => item.title)).toEqual(['Inherited from section', 'Inherited value: 2026-12-05', 'Open inherited line', 'Write inherited value to this task']);
             items!.find(item => item.title === 'Write inherited value to this task')!.click!();
             await settle();
             await tick(60);
@@ -352,7 +357,7 @@ describe('the date fields and their menus, as the row\'s line and its section sa
     it('shows a section\'s no value of the start as no value in a dashed field, with nothing the rules fill in', async () => {
         const h = await open(['# Tasks', '- tv-start::', '- [ ] Row', '# Done', '']);
         expect([input(h, 'startDate').placeholder, dashed(h, 'startDate')]).toEqual(['No value', true]);
-        expect(menu(h, 'startDate').map(item => item.title)).toEqual(['Inherited from section', 'Open inherited line']);
+        expect(menu(h, 'startDate').map(item => item.title)).toEqual(['Inherited from section', 'Inherited value: No value', 'Open inherited line']);
     });
 });
 

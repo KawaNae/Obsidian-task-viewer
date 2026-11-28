@@ -5,6 +5,7 @@ import {
     type FieldAction,
     type FieldFaint,
     type FieldKind,
+    type FieldMenuHeadModel,
     type FieldState,
 } from '../../../src/modals/hub/fields/FieldState';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
@@ -47,6 +48,20 @@ interface Row {
     emptied: string;
 }
 
+/**
+ * The head a state's menu has: where the inherited side is written, what it
+ * is, and whether the field's own line overrides it (a value, or no value).
+ */
+function headOf(name: StateName): FieldMenuHeadModel | null {
+    const [own, above] = [...name];
+    if (above === '·') return null;
+    return {
+        source: above === 'A' ? 'section' : 'file',
+        inherited: above === 'A' ? { kind: 'value', text: 'given' } : { kind: 'noValue' },
+        overridden: own !== '·',
+    };
+}
+
 /** Each state's look (`frame faint`), items, and what emptying it writes, for one kind. */
 function check(kind: FieldKind, table: Partial<Record<StateName, Row>>, extra?: readonly string[]) {
     for (const [name, want] of Object.entries(table) as [StateName, Row][]) {
@@ -54,9 +69,9 @@ function check(kind: FieldKind, table: Partial<Record<StateName, Row>>, extra?: 
             const s = state(name);
             const look = FieldStates.look(s, kind, v => v);
             expect(`${look.frame} ${faintWord(look.faint)}`).toBe(want.look);
-            const menu = FieldStates.menu(s, kind, { opensSource: true, kindItems: extra });
+            const menu = FieldStates.menu(s, kind, { opensSource: true, spell: v => v, kindItems: extra });
             expect(menu.items.map(word).join(', ')).toBe(want.items);
-            expect(menu.source).toBe(name[1] === 'A' ? 'section' : name[1] === '-' ? 'file' : null);
+            expect(menu.head).toEqual(headOf(name));
             expect(FieldStates.emptied(s, kind)).toBe(want.emptied);
         });
     }
@@ -80,7 +95,7 @@ describe('FieldStates: a date or a time (the start\'s, the end\'s)', () => {
 
 describe('FieldStates: the due\'s date and time', () => {
     it('reach the whole due, but for the time\'s clearValue, which empties the time alone', () => {
-        const items = (s: StateName, kind: FieldKind) => FieldStates.menu(state(s), kind, { opensSource: true }).items.map(word).join(', ');
+        const items = (s: StateName, kind: FieldKind) => FieldStates.menu(state(s), kind, { opensSource: true, spell: v => v }).items.map(word).join(', ');
         expect(items('v·', FieldKinds.dueDate)).toBe('clearValue');
         expect(items('v·', FieldKinds.dueTime)).toBe('clearValue·field');
         expect(items('vA', FieldKinds.dueTime)).toBe('openSource, clearToInherited');
@@ -91,6 +106,11 @@ describe('FieldStates: the due\'s date and time', () => {
         expect(FieldStates.look(state('vA'), FieldKinds.dueDate, v => v)).toEqual({ frame: 'own', faint: { kind: 'value', text: 'given' } });
         expect(FieldStates.look(state('vA'), FieldKinds.dueTime, v => v)).toEqual({ frame: 'own', faint: null });
         expect(FieldStates.look(state('·A'), FieldKinds.dueTime, v => v)).toEqual({ frame: 'inherited', faint: { kind: 'value', text: 'given' } });
+    });
+
+    it('say the inherited value at their menu\'s head as the spelling handed in spells it', () => {
+        const menu = FieldStates.menu(state('vA'), FieldKinds.dueTime, { opensSource: true, spell: v => `<${v}>` });
+        expect(menu.head).toEqual({ source: 'section', inherited: { kind: 'value', text: '<given>' }, overridden: true });
     });
 });
 
@@ -121,7 +141,7 @@ describe('FieldStates: a custom property, its conversions put after the inherite
     }, ['toList']);
 
     it('greys the inherited line where the hub has none of the note to open, the menu keeping its shape', () => {
-        const menu = FieldStates.menu(state('·A'), FieldKinds.property, { opensSource: false });
+        const menu = FieldStates.menu(state('·A'), FieldKinds.property, { opensSource: false, spell: v => v });
         expect(menu.items[0]).toEqual({ action: 'openSource', disabled: true });
         expect(menu.items.map(word)).toEqual(['openSource', 'writeInherited', 'noValue']);
     });

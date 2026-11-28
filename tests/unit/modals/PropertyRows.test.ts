@@ -105,7 +105,7 @@ describe('PropertyRows.of, fieldOf and menuOf: what each row is, draws and offer
         const rows = rowsOf(taskOf({}), { locked: () => true, findings: [finding('Dup'), finding('dup'), finding('Color', 'color')] });
         expect(rows).toEqual([{ folded: 'dup', key: 'Dup', state: { own: { kind: 'none' }, inherited: { kind: 'none' } }, locked: true }]);
         expect(PropertyRows.fieldOf(rows[0])).toEqual({ kind: 'blank' });
-        expect(PropertyRows.menuOf(rows[0], { opensSource: true })).toEqual({ type: null, menu: { source: null, items: [] } });
+        expect(PropertyRows.menuOf(rows[0], { opensSource: true })).toEqual({ type: null, menu: { head: null, items: [] } });
     });
 
     it('a row with a value a finding locks: what it is stays, and it has no menu', () => {
@@ -127,7 +127,7 @@ describe('PropertyRows.of, fieldOf and menuOf: what each row is, draws and offer
         });
         const row = only(task);
         expect(row.state.inherited).toEqual({ kind: 'value', value: text('a'), source: 'file' });
-        expect(PropertyRows.menuOf(row, { opensSource: true }).menu.source).toBe('file');
+        expect(PropertyRows.menuOf(row, { opensSource: true }).menu.head).toEqual({ source: 'file', inherited: { kind: 'value', text: 'a' }, overridden: false });
     });
 });
 

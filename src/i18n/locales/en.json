@@ -542,6 +542,8 @@
       "typeList": "Type: list",
       "fromSection": "Inherited from section",
       "fromFile": "Inherited from file",
+      "inheritedValue": "Inherited value: {{value}}",
+      "inheritedOverridden": "The inherited value is overridden",
       "inheritedFromFile": "inherited: file",
       "inheritedFromSection": "inherited: section",
       "contentTagLocked": "#tag inside the task name — edit it in the name field",

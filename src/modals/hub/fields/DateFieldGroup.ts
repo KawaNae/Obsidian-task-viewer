@@ -54,6 +54,18 @@ function spellOf(key: DateKey): (value: string) => string {
     return value => value;
 }
 
+/**
+ * The whole value the field `key` stands for, as its fields show it: the
+ * due's date and time together, as both its fields stand for the one due;
+ * the others as {@link spellOf}.
+ */
+function wholeSpellOf(key: DateKey): (value: string) => string {
+    if (key !== 'dueDate' && key !== 'dueTime') return spellOf(key);
+    const date = spellOf('dueDate');
+    const time = spellOf('dueTime');
+    return value => [date(value), time(value)].filter(text => text !== '').join(' ');
+}
+
 /** A row's dates as the six fields hold them, `''` for none; the due's date and time apart. */
 export function dateFieldsOf(task: Task): DateTimeFields {
     const due = DateUtils.splitDateTime(task.due ?? '');
@@ -171,9 +183,9 @@ export class DateFieldGroup {
 
     /** The field's menu as the task is now (`FieldStates.menu`). */
     private menuOf(key: DateKey): FieldMenu {
-        const { source, items } = FieldStates.menu(this.stateOf(key), KINDS[key], { opensSource: this.ctx.openSource !== null });
+        const { head, items } = FieldStates.menu(this.stateOf(key), KINDS[key], { opensSource: this.ctx.openSource !== null, spell: wholeSpellOf(key) });
         return {
-            heads: source ? [FieldMenus.head(source)] : [],
+            heads: FieldMenus.heads(head),
             items: items.map(action => FieldMenus.item(action, () => this.runMenu(key, action))),
         };
     }

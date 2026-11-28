@@ -437,12 +437,13 @@ describe('a property\'s row: the key, the field, and the menu button over the fi
         expect(items.map(item => [item.title, item.icon, item.disabled])).toEqual([
             ['Type: list', 'list', true],
             ['Inherited from section', 'heading', true],
+            ['Inherited value: x', 'corner-down-right', true],
             ['Open inherited line', 'external-link', true],
             ['Write inherited value to this task', 'copy', false],
             ['Set to no value', 'ban', false],
         ]);
-        expect(s.menus.last()!.separatorsAt).toEqual([2]);
-        expect(items.slice(0, 3).map(item => item.click)).toEqual([null, null, null]);
+        expect(s.menus.last()!.separatorsAt).toEqual([3]);
+        expect(items.slice(0, 4).map(item => item.click)).toEqual([null, null, null, null]);
         expect(s.menus.last()!.anchor).toMatchObject({ kind: 'belowRect' });
     });
 
@@ -506,7 +507,7 @@ describe('a property\'s row: the key, the field, and the menu button over the fi
     it('writes an inherited text at once as the layer above spells it: a text spelled with quotes stays a text', () => {
         const quoted: PropertyScalar = { type: 'text', text: '123', spelling: '"123"' };
         const s = setUp({}, { inherited: byKey({ code: quoted }) });
-        expect(s.menuOf('code').map(item => item.title)).toEqual(['Type: text', 'Inherited from section', 'Open inherited line', 'Write inherited value to this task', 'Set to no value']);
+        expect(s.menuOf('code').map(item => item.title)).toEqual(['Type: text', 'Inherited from section', 'Inherited value: "123"', 'Open inherited line', 'Write inherited value to this task', 'Set to no value']);
         s.pick('code', 'Write inherited value to this task');
         expect(s.writes).toHaveLength(1);
         expect(s.writes[0].code.value).toEqual({ type: 'text', text: '123', spelling: '"123"' });

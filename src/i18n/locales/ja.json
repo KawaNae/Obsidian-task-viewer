@@ -542,6 +542,8 @@
       "typeList": "タイプ：リスト",
       "fromSection": "セクションから継承",
       "fromFile": "ファイルから継承",
+      "inheritedValue": "継承した値: {{value}}",
+      "inheritedOverridden": "継承した値は上書きされています",
       "inheritedFromFile": "継承: ファイル",
       "inheritedFromSection": "継承: セクション",
       "contentTagLocked": "タスク名内の #タグ — 名前フィールドで編集してください",
