@@ -462,7 +462,7 @@ describe('a property\'s menu button pressed with a value typed in its own field'
         expect(out).toMatchObject({
             acted: true,
             menus: 1,
-            menu: [tr('modal.hub.typeText'), tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.toList'), tr('modal.hub.setNoValue'), tr('modal.hub.clearToInherited')],
+            menu: [tr('modal.hub.typeText'), tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: 'home' }), tr('modal.hub.inheritedOverridden'), tr('modal.hub.openInheritedLine'), tr('modal.hub.toList'), tr('modal.hub.setNoValue'), tr('modal.hub.clearToInherited')],
             writes: 1,
             disk: lines.join('\n'),
         });

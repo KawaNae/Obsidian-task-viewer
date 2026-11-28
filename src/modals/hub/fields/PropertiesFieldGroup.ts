@@ -391,7 +391,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             const [title, icon] = TYPE_LINES[type];
             heads.push({ title: t(title), icon });
         }
-        if (menu.source) heads.push(FieldMenus.head(menu.source));
+        heads.push(...FieldMenus.heads(menu.head));
         const items = menu.items.map((entry): FieldMenuItem => {
             const run = () => this.runMenu(prop, entry);
             if ('writes' in entry) {

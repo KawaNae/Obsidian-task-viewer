@@ -23,6 +23,9 @@ import { FieldKinds, FieldStates, type FieldAction, type FieldState, type StyleF
 const FIELDS: readonly StyleField[] = ['color', 'linestyle', 'mask'];
 const LABEL_KEYS: Record<StyleField, string> = { color: 'modal.hub.color', linestyle: 'modal.hub.linestyle', mask: 'modal.hub.mask' };
 
+/** A style's value as its field and its menu show it: as written. */
+const spellStyle = (value: string): string => value;
+
 /**
  * How each field reads: a color (a hex value or a CSS name), one of the line
  * styles in any case, a mask as typed. Empty, each takes the row's own value
@@ -165,9 +168,9 @@ export class StyleFieldGroup implements ClosingPart {
     private menuOf(field: StyleField): FieldMenu {
         if (this.ctx.locked(field)) return { heads: [], items: [] };
         const state = this.stateOf(field);
-        const { source, items } = FieldStates.menu(state, FieldKinds.style, { opensSource: this.ctx.openSource !== null });
+        const { head, items } = FieldStates.menu(state, FieldKinds.style, { opensSource: this.ctx.openSource !== null, spell: spellStyle });
         return {
-            heads: source ? [FieldMenus.head(source)] : [],
+            heads: FieldMenus.heads(head),
             items: items.map(action => FieldMenus.item(action, () => this.runMenu(field, action))),
         };
     }
@@ -214,7 +217,7 @@ export class StyleFieldGroup implements ClosingPart {
 
     /** The field's look and its … from its state now, and the color's swatch. */
     private restyle(field: StyleField): void {
-        this.looks[field].show(FieldStates.look(this.stateOf(field), FieldKinds.style, value => value));
+        this.looks[field].show(FieldStates.look(this.stateOf(field), FieldKinds.style, spellStyle));
         this.menus[field].sync();
         if (field === 'color') this.updateColorSwatch();
     }

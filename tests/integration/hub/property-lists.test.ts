@@ -120,7 +120,7 @@ describe('the hub edits a list item by item', () => {
         expect(shown).toEqual({
             own: ['a', 'b'], add: true, inherited: ['lab', 'home'], inheritedInputs: 0,
             inheritedMenu: [
-                tr('modal.hub.typeList'), tr('modal.hub.fromSection'),
+                tr('modal.hub.typeList'), tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: ['lab', 'home'].join(tr('modal.hub.itemJoin')) }),
                 tr('modal.hub.openInheritedLine'), tr('modal.hub.writeInherited'), tr('modal.hub.setNoValue'),
             ],
         });
@@ -315,7 +315,7 @@ describe('the hub edits a list item by item', () => {
         `);
         expect(shown).toEqual({
             menu: [
-                tr('modal.hub.typeList'), tr('modal.hub.fromSection'),
+                tr('modal.hub.typeList'), tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: ['lab', 'home'].join(tr('modal.hub.itemJoin')) }), tr('modal.hub.inheritedOverridden'),
                 tr('modal.hub.openInheritedLine'), tr('modal.hub.setNoValue'), tr('modal.hub.clearToInherited'),
             ],
             inputs: 0,
@@ -360,7 +360,7 @@ describe('an inherited text an Enter makes the row\'s own', () => {
             focused: true,
             dashed: false,
             menu: [
-                tr('modal.hub.typeText'), tr('modal.hub.fromSection'),
+                tr('modal.hub.typeText'), tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: 'home' }), tr('modal.hub.inheritedOverridden'),
                 tr('modal.hub.openInheritedLine'), tr('modal.hub.toList'), tr('modal.hub.setNoValue'), tr('modal.hub.clearToInherited'),
             ],
         });

@@ -166,7 +166,7 @@ describe('the hub hides an inherited value', () => {
             value: '',
             placeholder: 'red',
             dashed: true,
-            menu: [tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.writeInherited'), tr('modal.hub.setNoValue')],
+            menu: [tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: 'red' }), tr('modal.hub.openInheritedLine'), tr('modal.hub.writeInherited'), tr('modal.hub.setNoValue')],
         });
         run(`pickIn(colorRow(), ${JSON.stringify(tr('modal.hub.setNoValue'))}); await sleep(600); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLines(5, 5, '\t- tv-color::'));
@@ -187,7 +187,7 @@ describe('the hub hides an inherited value', () => {
             placeholder: 'red',
             struck: ['red', true],
             dashed: false,
-            menu: [tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.followInherited')],
+            menu: [tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: 'red' }), tr('modal.hub.inheritedOverridden'), tr('modal.hub.openInheritedLine'), tr('modal.hub.followInherited')],
         });
     });
 
@@ -204,12 +204,12 @@ describe('the hub hides an inherited value', () => {
         step(tr('modal.hub.writeInherited'));
         expect(readTestFile(TEST_FILE)).toBe(withLines(5, 5, '\t- tv-color:: red'));
         expect(look()).toEqual({ value: 'red', placeholder: 'red', struck: false });
-        expect(menu()).toEqual([tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.setNoValue'), tr('modal.hub.clearToInherited')]);
+        expect(menu()).toEqual([tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: 'red' }), tr('modal.hub.inheritedOverridden'), tr('modal.hub.openInheritedLine'), tr('modal.hub.setNoValue'), tr('modal.hub.clearToInherited')]);
 
         step(tr('modal.hub.setNoValue'));
         expect(readTestFile(TEST_FILE)).toBe(withLines(5, 5, '\t- tv-color::'));
         expect(look()).toEqual({ value: '', placeholder: 'red', struck: true });
-        expect(menu()).toEqual([tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.followInherited')]);
+        expect(menu()).toEqual([tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: 'red' }), tr('modal.hub.inheritedOverridden'), tr('modal.hub.openInheritedLine'), tr('modal.hub.followInherited')]);
 
         step(tr('modal.hub.followInherited'));
         expect(readTestFile(TEST_FILE)).toBe(LINES.join('\n'));
@@ -297,7 +297,7 @@ describe('the hub hides an inherited value', () => {
         `);
         expect(before).toEqual({
             area: ['', 'lab', 'lab'],
-            menu: [tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.followInherited')],
+            menu: [tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: 'lab' }), tr('modal.hub.inheritedOverridden'), tr('modal.hub.openInheritedLine'), tr('modal.hub.followInherited')],
             mask: [tr('modal.hub.noValue'), [tr('modal.hub.deleteKey')]],
         });
         run(`pickOf('area', ${JSON.stringify(tr('modal.hub.followInherited'))}); await sleep(600); return 'ok';`);
@@ -319,8 +319,8 @@ describe('the hub hides an inherited value', () => {
             });
         `);
         expect(before).toEqual({
-            wage: ['', '1450', false, [tr('modal.hub.typeNumber'), tr('modal.hub.fromFile'), tr('modal.hub.openInheritedLine'), tr('modal.hub.writeInherited'), tr('modal.hub.setNoValue')]],
-            mask: [tr('modal.hub.noValue'), [tr('modal.hub.fromFile'), tr('modal.hub.openInheritedLine')]],
+            wage: ['', '1450', false, [tr('modal.hub.typeNumber'), tr('modal.hub.fromFile'), tr('modal.hub.inheritedValue', { value: '1450' }), tr('modal.hub.openInheritedLine'), tr('modal.hub.writeInherited'), tr('modal.hub.setNoValue')]],
+            mask: [tr('modal.hub.noValue'), [tr('modal.hub.fromFile'), tr('modal.hub.inheritedValue', { value: tr('modal.hub.noValue') }), tr('modal.hub.openInheritedLine')]],
         });
         run(`pickOf('時給', ${JSON.stringify(tr('modal.hub.setNoValue'))}); await sleep(600); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(['- 時給:: 1450', '- tv-mask::', '', '# 見出し', '- [ ] 根の下 @2026-10-01', '\t- 時給::', ''].join('\n'));
@@ -341,7 +341,7 @@ describe('the hub hides an inherited value', () => {
             placeholder: tr('modal.hub.noValue'),
             dashed: true,
             struck: false,
-            menu: [tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine')],
+            menu: [tr('modal.hub.fromSection'), tr('modal.hub.inheritedValue', { value: tr('modal.hub.noValue') }), tr('modal.hub.openInheritedLine')],
         };
         expect(shownRows).toEqual({ color: inheritedNone, mask: inheritedNone });
 

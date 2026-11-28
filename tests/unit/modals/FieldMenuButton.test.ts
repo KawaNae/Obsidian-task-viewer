@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FieldMenuButton, type FieldMenu } from '../../../src/modals/form/FieldMenuButton';
 import { FieldLookView } from '../../../src/modals/hub/fields/FieldLookView';
-import { FieldMenus } from '../../../src/modals/hub/fields/FieldMenus';
+import { FieldMenus, HEAD_VALUE_LENGTH } from '../../../src/modals/hub/fields/FieldMenus';
 import type { MenuPresenter } from '../../../src/interaction/menu/MenuPresenter';
 import { keyOf } from '../../../src/views/sharedUI/PressCommit';
 import { FocusDoc, asEl } from '../helpers/focusDom';
@@ -30,7 +30,7 @@ describe('FieldMenuButton', () => {
 
     const ran: string[] = [];
     const full: FieldMenu = {
-        heads: [FieldMenus.head('section')],
+        heads: FieldMenus.heads({ source: 'section', inherited: { kind: 'value', text: 'sales' }, overridden: true }),
         items: [
             FieldMenus.item({ action: 'openSource', disabled: true }, () => ran.push('open')),
             FieldMenus.item({ action: 'dropOwn', name: 'clearToInherited', reach: 'value' }, () => ran.push('drop')),
@@ -51,11 +51,13 @@ describe('FieldMenuButton', () => {
         const shown = menus.last()!;
         expect(shown.items.map(item => [item.title, item.disabled])).toEqual([
             ['Inherited from section', true],
+            ['Inherited value: sales', true],
+            ['The inherited value is overridden', true],
             ['Open inherited line', true],
             ['Clear and follow inherited value', false],
         ]);
-        expect(shown.separatorsAt).toEqual([1]);
-        shown.items[2].click!();
+        expect(shown.separatorsAt).toEqual([3]);
+        shown.items[4].click!();
         expect(ran).toEqual(['drop']);
     });
 
@@ -106,5 +108,32 @@ describe('FieldLookView', () => {
         expect(box.find('tv-form__struck')).toBeNull();
         expect(box.classes.has('tv-form__has-struck')).toBe(false);
         expect(input.placeholder).toBe('No value');
+    });
+});
+
+describe('FieldMenus.heads: the greyed lines at the head of a field\'s menu', () => {
+    const titles = (head: Parameters<typeof FieldMenus.heads>[0]) => FieldMenus.heads(head).map(line => line.title);
+
+    it('says where the value is inherited from and what it is, and that the field\'s own line overrides it where it does', () => {
+        expect(titles({ source: 'section', inherited: { kind: 'value', text: 'sales' }, overridden: false }))
+            .toEqual(['Inherited from section', 'Inherited value: sales']);
+        expect(titles({ source: 'file', inherited: { kind: 'value', text: 'sales' }, overridden: true }))
+            .toEqual(['Inherited from file', 'Inherited value: sales', 'The inherited value is overridden']);
+    });
+
+    it('says an inherited no value as the fields say it', () => {
+        expect(titles({ source: 'section', inherited: { kind: 'noValue' }, overridden: true }))
+            .toEqual(['Inherited from section', 'Inherited value: No value', 'The inherited value is overridden']);
+    });
+
+    it('cuts a value longer than the line holds, by characters, and ends it in …', () => {
+        const at = (text: string) => titles({ source: 'section', inherited: { kind: 'value', text }, overridden: false })[1];
+        const fits = 'あ'.repeat(HEAD_VALUE_LENGTH);
+        expect(at(fits)).toBe(`Inherited value: ${fits}`);
+        expect(at(`${fits}い`)).toBe(`Inherited value: ${fits}…`);
+    });
+
+    it('has none where nothing is inherited', () => {
+        expect(FieldMenus.heads(null)).toEqual([]);
     });
 });

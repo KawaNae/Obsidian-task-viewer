@@ -108,9 +108,22 @@ export type FieldAction =
     | { readonly action: 'noValue' }
     | { readonly action: 'writeInherited' };
 
-/** A field's menu: where its inherited value is written (the greyed line at its head), then its items. */
+/**
+ * The greyed lines at the head of a field's menu, for a field the layers
+ * above give a value or no value: where it is written (`source`), what it
+ * is (`inherited`: the value as the field shows it, or no value), and
+ * whether the field's own line overrides it (`overridden`: a value of its
+ * own, or its own no value, which hides it).
+ */
+export interface FieldMenuHeadModel {
+    readonly source: CascadeSourceKind;
+    readonly inherited: { readonly kind: 'value'; readonly text: string } | { readonly kind: 'noValue' };
+    readonly overridden: boolean;
+}
+
+/** A field's menu: the greyed lines at its head (none where nothing is inherited), then its items. */
 export interface FieldMenuModel<X = never> {
-    readonly source: CascadeSourceKind | null;
+    readonly head: FieldMenuHeadModel | null;
     readonly items: readonly (FieldAction | X)[];
 }
 
@@ -163,27 +176,36 @@ export const FieldStates = {
     },
 
     /**
-     * The field's menu. Its head says where the inherited value is written,
-     * for a field the layers above give a value or no value, whether or not
-     * its own line wins over it. Its items, in this order: the inherited
+     * The field's menu. Its head, for a field the layers above give a value
+     * or no value whether or not its own line wins over it, says where that
+     * is written, what it is (spelled by `spell`, as the field's faint text
+     * spells it), and whether the field's own line overrides it. Its items, in this order: the inherited
      * value's line, the kind's own items (`kindItems`: a custom property's
      * conversions), the inherited value written as the field's own, no value,
      * then the field's own line taken out. One state shows one name of
      * taking it out. A field with neither side has no item, and shows no
      * menu button.
      */
-    menu<V, X = never>(state: FieldState<V>, kind: FieldKind, opts: { opensSource: boolean; kindItems?: readonly X[] }): FieldMenuModel<X> {
+    menu<V, X = never>(
+        state: FieldState<V>,
+        kind: FieldKind,
+        opts: { opensSource: boolean; spell: (value: V) => string; kindItems?: readonly X[] },
+    ): FieldMenuModel<X> {
         const { own, inherited } = state;
         const items: (FieldAction | X)[] = [];
-        const source = inherited.kind === 'none' ? null : inherited.source;
-        if (source !== null) items.push({ action: 'openSource', disabled: !opts.opensSource });
+        const head: FieldMenuHeadModel | null = inherited.kind === 'none' ? null : {
+            source: inherited.source,
+            inherited: inherited.kind === 'value' ? { kind: 'value', text: opts.spell(inherited.value) } : { kind: 'noValue' },
+            overridden: own.kind !== 'none',
+        };
+        if (head !== null) items.push({ action: 'openSource', disabled: !opts.opensSource });
         items.push(...(opts.kindItems ?? []));
         if (own.kind === 'none' && inherited.kind === 'value') items.push({ action: 'writeInherited' });
         // No value is offered only where there is an inherited value for it to hide.
         if (kind.canHide && own.kind !== 'noValue' && inherited.kind === 'value') items.push({ action: 'noValue' });
         const name = dropName(state, kind);
         if (name) items.push({ action: 'dropOwn', name, reach: kind.part === 'time' && name === 'clearValue' ? 'field' : 'value' });
-        return { source, items };
+        return { head, items };
     },
 
     /**

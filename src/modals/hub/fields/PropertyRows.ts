@@ -141,7 +141,7 @@ export const PropertyRows = {
      * inherited value's line. A locked row has none, and draws no menu button.
      */
     menuOf(row: PropertyRow, input: PropertyMenuInput): PropertyMenu {
-        if (row.locked) return { type: null, menu: { source: null, items: [] } };
+        if (row.locked) return { type: null, menu: { head: null, items: [] } };
         const { own } = row.state;
         const conversions: PropertyConversion[] = [];
         // A value converts to a list of it alone only where a line holding
@@ -156,7 +156,7 @@ export const PropertyRows = {
         }
         return {
             type: typeShown(row),
-            menu: FieldStates.menu(row.state, FieldKinds.property, { opensSource: input.opensSource, kindItems: conversions }),
+            menu: FieldStates.menu(row.state, FieldKinds.property, { opensSource: input.opensSource, spell: spellingOf, kindItems: conversions }),
         };
     },
 
